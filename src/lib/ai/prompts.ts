@@ -1,0 +1,120 @@
+/**
+ * Press Vault — AI Prompt Templates
+ * Used in the agentic writing pipeline.
+ */
+
+export const PROMPTS = {
+  /**
+   * Step 1: Analyze collected materials (scraps + notes)
+   */
+  materialsAnalysis: (materials: string) => `당신은 콘텐츠 전략가입니다. 아래 소재들을 분석하여 다음을 추출하세요:
+
+1. 핵심 주제 및 키워드
+2. 소재 간 공통 테마
+3. 흥미로운 관점이나 인사이트
+4. 글쓰기에 활용할 수 있는 연결고리
+
+분석 결과를 한국어로 작성하세요.
+
+소재 목록:
+${materials}`,
+
+  /**
+   * Step 2: Suggest 3 topics based on analysis
+   */
+  topicSuggestions: (analysis: string) => `소재 분석 결과를 바탕으로 글 주제를 3개 제안하세요.
+각 주제는 다음 형식으로 제시하세요:
+
+1. 주제: [제목]
+   방향: [어떤 각도에서 쓸 것인지]
+   예상 독자: [누구를 위한 글인지]
+
+한국어로 작성하세요.
+
+소재 분석:
+${analysis}`,
+
+  /**
+   * Step 5: Generate draft with citations
+   */
+  draftGeneration: (params: {
+    persona: string;
+    materials: string;
+    analysis: string;
+    topic: string;
+    coreMessage: string;
+    length: string;
+    emphasizedScraps: string;
+    additionalInstructions: string;
+  }) => `당신은 ${params.persona}입니다. 아래 소재와 지시사항을 바탕으로 글을 작성하세요.
+
+규칙:
+1. 반드시 제공된 소재를 활용하여 글을 작성하세요.
+2. 소재를 인용할 때는 [출처: 소재 번호] 형식으로 표시하세요.
+3. 소재에 없는 내용을 임의로 추가하지 마세요.
+4. 글의 길이는 약 ${params.length}자로 작성하세요.
+5. 한국어로 작성하세요.
+
+[소재]
+${params.materials}
+
+[소재 분석]
+${params.analysis}
+
+[선택된 주제]
+${params.topic}
+
+[글 방향]
+핵심 메시지: ${params.coreMessage}
+강조 소재: ${params.emphasizedScraps}
+추가 지시: ${params.additionalInstructions}`,
+} as const;
+
+/**
+ * Available writing personas
+ */
+export const PERSONAS = [
+  {
+    id: "journalist",
+    name: "📰 저널리스트",
+    tone: "객관적, 정보 전달형",
+    description: "사실 중심, 인용 적극 활용",
+  },
+  {
+    id: "essayist",
+    name: "📝 에세이스트",
+    tone: "개인적, 성찰적",
+    description: "경험과 감상 중심",
+  },
+  {
+    id: "analyst",
+    name: "🔬 분석가",
+    tone: "분석적, 논리적",
+    description: "데이터와 근거 중심",
+  },
+  {
+    id: "curator",
+    name: "💡 큐레이터",
+    tone: "편집자적, 추천형",
+    description: '"이것이 좋은 이유" 중심',
+  },
+  {
+    id: "pragmatist",
+    name: "🎯 실용주의자",
+    tone: "실용적, 가이드형",
+    description: '"이렇게 하면 됩니다" 중심',
+  },
+] as const;
+
+export type PersonaId = (typeof PERSONAS)[number]["id"];
+
+/**
+ * Writing length options
+ */
+export const WRITING_LENGTHS = [
+  { id: "short", label: "짧게", chars: "800자" },
+  { id: "medium", label: "중간", chars: "1500자" },
+  { id: "long", label: "길게", chars: "3000자" },
+] as const;
+
+export type WritingLengthId = (typeof WRITING_LENGTHS)[number]["id"];

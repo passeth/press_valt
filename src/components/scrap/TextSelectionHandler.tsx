@@ -76,9 +76,12 @@ export function TextSelectionHandler({
       const prefix = textBefore.slice(-30);
       const suffix = textAfter.slice(0, 30);
 
-      // Get button position from selection rect
+      // Get button position relative to the container
       const rect = range.getBoundingClientRect();
+      const containerRect = containerRef.current!.getBoundingClientRect();
 
+      // Position: horizontally centered on the selection end,
+      // vertically right below the selection bottom — relative to container
       setSelection({
         text,
         prefix,
@@ -87,8 +90,8 @@ export function TextSelectionHandler({
         startOffset: range.startOffset,
         endOffset: range.endOffset,
         buttonPosition: {
-          x: rect.left + rect.width / 2,
-          y: rect.top + window.scrollY,
+          x: rect.left + rect.width / 2 - containerRect.left,
+          y: rect.bottom - containerRect.top + 6,
         },
       });
     }, 10);
@@ -110,22 +113,22 @@ export function TextSelectionHandler({
     <>
       <div
         ref={containerRef}
-        className={`article-content ${className}`}
+        className={`article-content relative ${className}`}
         onMouseUp={handleMouseUp}
         onTouchEnd={handleMouseUp}
       >
         {children}
-      </div>
 
-      {/* Floating scrap button */}
-      {selection && !modalOpen && (
-        <div data-scrap-btn>
-          <FloatingScrapButton
-            position={selection.buttonPosition}
-            onClick={() => setModalOpen(true)}
-          />
-        </div>
-      )}
+        {/* Floating scrap button — inside container for correct absolute positioning */}
+        {selection && !modalOpen && (
+          <div data-scrap-btn>
+            <FloatingScrapButton
+              position={selection.buttonPosition}
+              onClick={() => setModalOpen(true)}
+            />
+          </div>
+        )}
+      </div>
 
       {/* Scrap modal */}
       {selection && (

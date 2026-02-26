@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Build-generated content images (copied from content/_assets/images/)
+/public/images/content/

@@ -1,9 +1,13 @@
-import { createClient } from "@/lib/supabase/server";
 import { TopNav } from "@/components/layout/TopNav";
 import { Footer } from "@/components/layout/Footer";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { ArticleCard } from "@/components/article/ArticleCard";
 import { ArticleGrid } from "@/components/article/ArticleGrid";
+import {
+  getAllArticles,
+  getCategories,
+  type ArticleMeta,
+} from "@/lib/content/reader";
 
 export const metadata = {
   title: "아티클",
@@ -14,40 +18,77 @@ interface ArticlesPageProps {
   searchParams: Promise<{ page?: string; category?: string }>;
 }
 
-export default async function ArticlesPage({ searchParams }: ArticlesPageProps) {
+async function fetchArticles(
+  category?: string
+): Promise<{ articles: ArticleMeta[]; categories: string[] }> {
+  // Try Supabase first, fall back to filesystem
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (supabaseUrl && supabaseKey) {
+    try {
+      const { createClient } = await import("@/lib/supabase/server");
+      const supabase = await createClient();
+
+      let query = supabase
+        .from("admin_articles")
+        .select(
+          "slug, title, summary, category, tags, thumbnail_url, created_at, status",
+          { count: "exact" }
+        )
+        .eq("status", "published")
+        .order("created_at", { ascending: false });
+
+      if (category) {
+        query = query.eq("category", category);
+      }
+
+      const { data: articles } = await query;
+
+      const { data: allArticles } = await supabase
+        .from("admin_articles")
+        .select("category")
+        .eq("status", "published")
+        .not("category", "is", null);
+
+      const categories = [
+        ...new Set(
+          (allArticles ?? []).map((a) => a.category).filter(Boolean)
+        ),
+      ] as string[];
+
+      if (articles && articles.length > 0) {
+        return { articles, categories };
+      }
+    } catch {
+      // Supabase unavailable, fall through to filesystem
+    }
+  }
+
+  // Filesystem fallback
+  let articles = await getAllArticles();
+  const categories = await getCategories();
+
+  if (category) {
+    articles = articles.filter((a) => a.category === category);
+  }
+
+  return { articles, categories };
+}
+
+export default async function ArticlesPage({
+  searchParams,
+}: ArticlesPageProps) {
   const { page: pageParam, category } = await searchParams;
   const page = Math.max(1, Number(pageParam) || 1);
   const limit = 12;
 
-  const supabase = await createClient();
+  const { articles: allArticles, categories } = await fetchArticles(category);
 
-  let query = supabase
-    .from("admin_articles")
-    .select("slug, title, summary, category, tags, thumbnail_url, created_at", {
-      count: "exact",
-    })
-    .eq("status", "published")
-    .order("created_at", { ascending: false })
-    .range((page - 1) * limit, page * limit - 1);
-
-  if (category) {
-    query = query.eq("category", category);
-  }
-
-  const { data: articles, count } = await query;
-  const total = count ?? 0;
+  // Paginate
+  const total = allArticles.length;
   const totalPages = Math.ceil(total / limit);
-
-  // Get unique categories for filter
-  const { data: allArticles } = await supabase
-    .from("admin_articles")
-    .select("category")
-    .eq("status", "published")
-    .not("category", "is", null);
-
-  const categories = [
-    ...new Set((allArticles ?? []).map((a) => a.category).filter(Boolean)),
-  ] as string[];
+  const articles = allArticles.slice((page - 1) * limit, page * limit);
 
   return (
     <div className="min-h-screen flex flex-col">

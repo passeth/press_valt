@@ -1,24 +1,74 @@
 import { notFound } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
 import { TopNav } from "@/components/layout/TopNav";
 import { Footer } from "@/components/layout/Footer";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { ArticleContent } from "./ArticleContent";
+import { getArticleBySlug, type ArticleDetail } from "@/lib/content/reader";
 
 interface ArticlePageProps {
   params: Promise<{ slug: string }>;
 }
 
+async function fetchArticle(slug: string): Promise<ArticleDetail | null> {
+  // Try Supabase first
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (supabaseUrl && supabaseKey) {
+    try {
+      const { createClient } = await import("@/lib/supabase/server");
+      const supabase = await createClient();
+
+      const { data: article } = await supabase
+        .from("admin_articles")
+        .select(
+          "id, slug, title, summary, category, tags, thumbnail_url, status, published_revision_id, created_at, updated_at"
+        )
+        .eq("slug", slug)
+        .eq("status", "published")
+        .maybeSingle();
+
+      if (article?.published_revision_id) {
+        const { data: revision } = await supabase
+          .from("admin_article_revisions")
+          .select("id, rendered_html, created_at")
+          .eq("id", article.published_revision_id)
+          .maybeSingle();
+
+        if (revision) {
+          const { data: blocks } = await supabase
+            .from("admin_article_blocks")
+    .select("id, block_id, block_type, plain_text, markdown_text, order_index")
+            .eq("revision_id", revision.id)
+            .order("order_index", { ascending: true });
+
+          return {
+            slug: article.slug,
+            title: article.title,
+            summary: article.summary,
+            category: article.category,
+            tags: article.tags,
+            thumbnail_url: article.thumbnail_url,
+            created_at: article.created_at,
+            status: article.status,
+            rendered_html: revision.rendered_html || "",
+            markdown: "",
+            blocks: blocks ?? [],
+          };
+        }
+      }
+    } catch {
+      // Fall through to filesystem
+    }
+  }
+
+  // Filesystem fallback
+  return getArticleBySlug(slug);
+}
+
 export async function generateMetadata({ params }: ArticlePageProps) {
   const { slug } = await params;
-  const supabase = await createClient();
-
-  const { data: article } = await supabase
-    .from("admin_articles")
-    .select("title, summary")
-    .eq("slug", slug)
-    .eq("status", "published")
-    .maybeSingle();
+  const article = await fetchArticle(slug);
 
   if (!article) return { title: "Not Found" };
 
@@ -30,39 +80,11 @@ export async function generateMetadata({ params }: ArticlePageProps) {
 
 export default async function ArticlePage({ params }: ArticlePageProps) {
   const { slug } = await params;
-  const supabase = await createClient();
+  const article = await fetchArticle(slug);
 
-  // Fetch article
-  const { data: article, error: articleError } = await supabase
-    .from("admin_articles")
-    .select(
-      "id, slug, title, summary, category, tags, thumbnail_url, status, published_revision_id, created_at, updated_at"
-    )
-    .eq("slug", slug)
-    .eq("status", "published")
-    .maybeSingle();
-
-  if (articleError || !article || !article.published_revision_id) {
+  if (!article) {
     notFound();
   }
-
-  // Fetch revision HTML
-  const { data: revision } = await supabase
-    .from("admin_article_revisions")
-    .select("id, rendered_html, created_at")
-    .eq("id", article.published_revision_id)
-    .maybeSingle();
-
-  if (!revision) {
-    notFound();
-  }
-
-  // Fetch blocks for scrap references
-  const { data: blocks } = await supabase
-    .from("admin_article_blocks")
-    .select("id, block_id, block_type, plain_text, markdown_text, order_index")
-    .eq("revision_id", revision.id)
-    .order("order_index", { ascending: true });
 
   const formattedDate = new Date(article.created_at).toLocaleDateString(
     "ko-KR",
@@ -109,9 +131,9 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
 
         {/* Article body with text selection handler */}
         <ArticleContent
-          renderedHtml={revision.rendered_html || ""}
-          revisionId={revision.id}
-          blocks={blocks ?? []}
+          renderedHtml={article.rendered_html}
+          revisionId={article.blocks[0]?.id || "local"}
+          blocks={article.blocks}
         />
       </PageContainer>
 

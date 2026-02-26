@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "sync-content": "tsx scripts/sync-content.ts",
-    "prebuild": "npm run sync-content"
+    "copy-images": "tsx scripts/copy-images.ts",
+    "prebuild": "npm run copy-images && npm run sync-content"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.47",

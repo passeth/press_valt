@@ -1,6 +1,7 @@
 "use client";
 
 import { TextSelectionHandler } from "@/components/scrap/TextSelectionHandler";
+import { ScrapSidebar } from "@/components/scrap/ScrapSidebar";
 
 interface Block {
   id: string;
@@ -14,19 +15,24 @@ interface Block {
 interface ArticleContentProps {
   renderedHtml: string;
   revisionId: string;
+  articleId?: string;
   blocks: Block[];
 }
 
 export function ArticleContent({
   renderedHtml,
   revisionId,
+  articleId,
 }: ArticleContentProps) {
   return (
-    <TextSelectionHandler sourceRevisionId={revisionId}>
-      <div
-        className="prose"
-        dangerouslySetInnerHTML={{ __html: renderedHtml }}
-      />
-    </TextSelectionHandler>
+    <>
+      <TextSelectionHandler sourceRevisionId={revisionId}>
+        <div
+          className="prose"
+          dangerouslySetInnerHTML={{ __html: renderedHtml }}
+        />
+      </TextSelectionHandler>
+      <ScrapSidebar articleId={articleId} />
+    </>
   );
 }

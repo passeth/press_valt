@@ -1,11 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
+const NAV_LINKS = [
+  { href: "/articles", label: "아티클", auth: false },
+  { href: "/collections", label: "컬렉션", auth: true },
+  { href: "/my-press", label: "나의 프레스", auth: true },
+];
+
 export function TopNav() {
+  const pathname = usePathname();
   const router = useRouter();
   const [user, setUser] = useState<{ id: string } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -33,16 +40,28 @@ export function TopNav() {
     router.refresh();
   };
 
+  const isActive = (href: string) =>
+    pathname === href || pathname.startsWith(href + "/");
+
   return (
     <header className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b border-border">
       <nav className="mx-auto flex max-w-[var(--width-content)] items-center justify-between px-16 h-[60px]">
-        {/* Left — article link */}
-        <Link
-          href="/articles"
-          className="text-[length:var(--text-small)] font-medium text-text-secondary hover:text-text-primary transition-colors"
-        >
-          아티클
-        </Link>
+        {/* Left — navigation links */}
+        <div className="flex items-center gap-6">
+          {NAV_LINKS.filter((link) => !link.auth || user).map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className={`text-[length:var(--text-small)] font-medium transition-colors ${
+                isActive(link.href)
+                  ? "text-text-primary"
+                  : "text-text-secondary hover:text-text-primary"
+              }`}
+            >
+              {link.label}
+            </Link>
+          ))}
+        </div>
 
         {/* Center — logo */}
         <Link
@@ -52,7 +71,7 @@ export function TopNav() {
           PRESS VAULT
         </Link>
 
-        {/* Right — auth */}
+        {/* Right — auth + dashboard */}
         <div className="flex items-center gap-6">
           {loading ? (
             <span className="w-16 h-4 bg-surface animate-pulse" />
@@ -60,9 +79,23 @@ export function TopNav() {
             <>
               <Link
                 href="/dashboard"
-                className="text-[length:var(--text-small)] font-medium text-text-secondary hover:text-text-primary transition-colors"
+                className={`text-[length:var(--text-small)] font-medium transition-colors ${
+                  isActive("/dashboard")
+                    ? "text-text-primary"
+                    : "text-text-secondary hover:text-text-primary"
+                }`}
               >
                 대시보드
+              </Link>
+              <Link
+                href="/settings"
+                className={`text-[length:var(--text-small)] transition-colors ${
+                  isActive("/settings")
+                    ? "text-text-primary"
+                    : "text-text-tertiary hover:text-text-primary"
+                }`}
+              >
+                설정
               </Link>
               <button
                 onClick={handleLogout}

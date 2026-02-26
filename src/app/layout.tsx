@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Noto_Sans_KR, Inter, Playfair_Display } from "next/font/google";
+import { ThemeProvider } from "@/lib/theme/provider";
 import "./globals.css";
 
 const notoSansKR = Noto_Sans_KR({
@@ -50,7 +51,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko" className={`${notoSansKR.variable} ${inter.variable} ${playfairDisplay.variable}`}>
-      <body className="antialiased">{children}</body>
+      <body className="antialiased">
+        <ThemeProvider>{children}</ThemeProvider>
+      </body>
     </html>
   );
 }

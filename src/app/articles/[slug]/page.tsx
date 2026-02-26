@@ -5,11 +5,16 @@ import { PageContainer } from "@/components/layout/PageContainer";
 import { ArticleContent } from "./ArticleContent";
 import { getArticleBySlug, type ArticleDetail } from "@/lib/content/reader";
 
+type ArticlePageDetail = ArticleDetail & {
+  article_id?: string;
+  revision_id?: string;
+};
+
 interface ArticlePageProps {
   params: Promise<{ slug: string }>;
 }
 
-async function fetchArticle(slug: string): Promise<ArticleDetail | null> {
+async function fetchArticle(slug: string): Promise<ArticlePageDetail | null> {
   // Try Supabase first
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -43,6 +48,7 @@ async function fetchArticle(slug: string): Promise<ArticleDetail | null> {
             .order("order_index", { ascending: true });
 
           return {
+            article_id: article.id,
             slug: article.slug,
             title: article.title,
             summary: article.summary,
@@ -51,6 +57,7 @@ async function fetchArticle(slug: string): Promise<ArticleDetail | null> {
             thumbnail_url: article.thumbnail_url,
             created_at: article.created_at,
             status: article.status,
+            revision_id: revision.id,
             rendered_html: revision.rendered_html || "",
             markdown: "",
             blocks: blocks ?? [],
@@ -132,7 +139,8 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
         {/* Article body with text selection handler */}
         <ArticleContent
           renderedHtml={article.rendered_html}
-          revisionId={article.blocks[0]?.id || "local"}
+          revisionId={article.revision_id || article.blocks[0]?.id || "local"}
+          articleId={article.article_id}
           blocks={article.blocks}
         />
       </PageContainer>

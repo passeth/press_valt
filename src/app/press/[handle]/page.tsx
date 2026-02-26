@@ -1,15 +1,14 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
-import { TopNav } from "@/components/layout/TopNav";
-import { Footer } from "@/components/layout/Footer";
-import { PageContainer } from "@/components/layout/PageContainer";
+import { Footer, PageContainer, TopNav } from "@/components/layout";
 
 interface PressPageProps {
   params: Promise<{ handle: string }>;
 }
 
-export async function generateMetadata({ params }: PressPageProps) {
+export async function generateMetadata({ params }: PressPageProps): Promise<Metadata> {
   const { handle } = await params;
   const supabase = await createClient();
 
@@ -20,7 +19,7 @@ export async function generateMetadata({ params }: PressPageProps) {
     .eq("press_is_public", true)
     .maybeSingle();
 
-  if (!profile) return { title: "Not Found" };
+  if (!profile) return { title: "페이지를 찾을 수 없음" };
 
   return {
     title: `${profile.display_name || profile.handle}의 프레스`,
@@ -46,46 +45,56 @@ export default async function PressPage({ params }: PressPageProps) {
   // Fetch published posts
   const { data: posts } = await supabase
     .from("user_posts")
-    .select("slug, title, markdown, published_at, created_at")
+    .select("slug, title, markdown, rendered_html, published_at, created_at")
     .eq("user_id", profile.id)
     .eq("status", "published")
     .order("published_at", { ascending: false });
 
+  const normalizeExcerpt = (raw: string | null) => {
+    const cleaned = (raw ?? "").replace(/\s+/g, " ").trim();
+    if (!cleaned) {
+      return "요약이 아직 없습니다.";
+    }
+    if (cleaned.length <= 180) {
+      return cleaned;
+    }
+    return `${cleaned.slice(0, 180)}...`;
+  };
+
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-background">
       <TopNav />
 
-      <PageContainer maxWidth="article" className="pt-16 pb-20">
-        {/* Profile header */}
-        <header className="mb-12 text-center">
-          <h1 className="text-[length:var(--text-h1)] font-serif font-semibold italic mb-2">
+      <PageContainer maxWidth="article" className="py-10">
+        <header className="mb-10 border-b border-border pb-6">
+          <p className="text-[length:var(--text-caption)] uppercase tracking-[0.08em] text-text-secondary">
+            공개 프레스
+          </p>
+          <h1 className="mt-2 text-[length:var(--text-display)] font-serif font-bold italic text-text-primary">
             {profile.display_name || profile.handle}
           </h1>
           {profile.bio && (
-            <p className="text-[length:var(--text-small)] text-text-secondary max-w-lg mx-auto">
+            <p className="mt-3 max-w-2xl text-[length:var(--text-body)] text-text-secondary">
               {profile.bio}
             </p>
           )}
         </header>
 
-        <div className="border-t border-border mb-10" />
-
-        {/* Posts */}
         {posts && posts.length > 0 ? (
-          <div className="space-y-6">
+          <div className="space-y-4">
             {posts.map((post) => (
-              <article key={post.slug} className="group">
+              <article key={post.slug} className="group border border-border bg-background p-5 transition-colors hover:bg-surface">
                 <Link
                   href={`/press/${handle}/${post.slug}`}
-                  className="block border border-border p-6 hover:bg-surface transition-colors"
+                  className="block"
                 >
-                  <h2 className="text-[length:var(--text-h2)] font-serif font-semibold italic mb-2 group-hover:text-accent-hover transition-colors">
+                  <h2 className="text-[length:var(--text-h2)] font-serif font-semibold italic text-text-primary transition-colors group-hover:text-accent">
                     {post.title}
                   </h2>
-                  <p className="text-[length:var(--text-small)] text-text-secondary line-clamp-2 mb-3">
-                    {post.markdown?.substring(0, 200)}
+                  <p className="mt-3 text-[length:var(--text-small)] text-text-secondary">
+                    {normalizeExcerpt(post.markdown)}
                   </p>
-                  <p className="text-[length:var(--text-caption)] text-text-tertiary">
+                  <p className="mt-4 text-[length:var(--text-caption)] text-text-secondary">
                     {new Date(
                       post.published_at || post.created_at
                     ).toLocaleDateString("ko-KR", {
@@ -99,9 +108,12 @@ export default async function PressPage({ params }: PressPageProps) {
             ))}
           </div>
         ) : (
-          <div className="py-20 text-center">
-            <p className="text-text-secondary text-[length:var(--text-body)]">
+          <div className="border border-border bg-surface p-10 text-center">
+            <p className="text-[length:var(--text-body)] text-text-primary">
               아직 발행된 글이 없습니다.
+            </p>
+            <p className="mt-2 text-[length:var(--text-small)] text-text-secondary">
+              조금 뒤에 다시 방문해보세요.
             </p>
           </div>
         )}

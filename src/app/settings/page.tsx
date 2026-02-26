@@ -3,10 +3,12 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { useTheme } from "@/lib/theme/provider";
 import { TopNav } from "@/components/layout/TopNav";
 import { Footer } from "@/components/layout/Footer";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
+import type { ThemeId } from "@/lib/theme/themes";
 
 interface Profile {
   handle: string;
@@ -18,6 +20,7 @@ interface Profile {
 
 export default function SettingsPage() {
   const router = useRouter();
+  const { theme, setTheme, themes } = useTheme();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -122,6 +125,41 @@ export default function SettingsPage() {
         </div>
 
         <div className="space-y-8">
+          {/* Theme section */}
+          <section className="border border-border p-6">
+            <h2 className="text-[length:var(--text-h3)] font-medium mb-4">
+              테마
+            </h2>
+            <p className="text-[length:var(--text-caption)] text-text-tertiary mb-4">
+              사이트의 색상과 분위기를 변경합니다.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {themes.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => setTheme(t.id as ThemeId)}
+                  className={`border p-4 text-left transition-colors ${
+                    theme === t.id
+                      ? "border-accent bg-surface"
+                      : "border-border hover:bg-surface"
+                  }`}
+                >
+                  <p className="text-[length:var(--text-body)] font-medium mb-1">
+                    {t.name}
+                  </p>
+                  <p className="text-[length:var(--text-caption)] text-text-secondary leading-relaxed">
+                    {t.description}
+                  </p>
+                  {theme === t.id && (
+                    <p className="text-[length:var(--text-badge)] text-accent font-medium mt-2 uppercase tracking-[1px]">
+                      현재 적용
+                    </p>
+                  )}
+                </button>
+              ))}
+            </div>
+          </section>
+
           {/* Profile section */}
           <section className="border border-border p-6">
             <h2 className="text-[length:var(--text-h3)] font-medium mb-6">
@@ -137,7 +175,7 @@ export default function SettingsPage() {
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   placeholder="표시될 이름"
-                  className="w-full px-4 py-2 border border-border text-[length:var(--text-body)] placeholder:text-placeholder focus:outline-none focus:border-accent transition-colors"
+                  className="w-full px-4 py-2 border border-border bg-background text-text-primary text-[length:var(--text-body)] placeholder:text-placeholder focus:outline-none focus:border-accent transition-colors"
                 />
               </div>
               <div>
@@ -149,7 +187,7 @@ export default function SettingsPage() {
                   onChange={(e) => setBio(e.target.value)}
                   placeholder="간단한 자기소개"
                   rows={3}
-                  className="w-full px-4 py-2 border border-border text-[length:var(--text-body)] placeholder:text-placeholder focus:outline-none focus:border-accent transition-colors resize-none"
+                  className="w-full px-4 py-2 border border-border bg-background text-text-primary text-[length:var(--text-body)] placeholder:text-placeholder focus:outline-none focus:border-accent transition-colors resize-none"
                 />
               </div>
             </div>

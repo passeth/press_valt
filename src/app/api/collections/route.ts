@@ -55,6 +55,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Ensure profile row exists for users created before trigger setup
+    const { error: profileUpsertError } = await supabase.from("profiles").upsert(
+      {
+        id: user.id,
+        display_name:
+          user.user_metadata?.display_name ?? user.user_metadata?.name ?? null,
+        handle: user.user_metadata?.handle ?? null,
+      },
+      { onConflict: "id", ignoreDuplicates: false }
+    );
+
+    if (profileUpsertError) {
+      return NextResponse.json({ error: profileUpsertError.message }, { status: 500 });
+    }
+
     const body = (await request.json()) as CreateCollectionBody;
 
     if (!body.title?.trim()) {

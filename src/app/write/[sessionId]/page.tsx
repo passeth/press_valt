@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useState, useCallback, use } from "react";
 import { useRouter } from "next/navigation";
 import { TopNav } from "@/components/layout/TopNav";
 import { Footer } from "@/components/layout/Footer";
@@ -99,25 +99,46 @@ export default function WritePage({ params }: WritePageProps) {
     }
   };
 
+
+  const buildMaterials = useCallback((): string => {
+    return scraps
+      .map((s, i) => {
+        const num = String(i + 1).padStart(2, "0");
+        const note = s.user_note ? `\n   메모: ${s.user_note}` : "";
+        return `${num}. "${s.exact_quote}"${note}`;
+      })
+      .join("\n\n");
+  }, [scraps]);
+
+
+  const readStream = async (
+    res: Response,
+    setter: React.Dispatch<React.SetStateAction<string>>
+  ) => {
+    const reader = res.body?.getReader();
+    if (!reader) return;
+    const decoder = new TextDecoder();
+    let accumulated = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      accumulated += decoder.decode(value, { stream: true });
+      setter(accumulated);
+    }
+  };
   const handleAnalyze = async () => {
     setAiLoading(true);
+    setAnalysis("");
     try {
       const res = await fetch("/api/writing/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          session_id: sessionId,
-          scraps: scraps.map((s) => ({
-            quote: s.exact_quote,
-            note: s.user_note,
-          })),
-          direction: { topic, angle, audience, tone },
+          materials: buildMaterials(),
         }),
       });
-
       if (res.ok) {
-        const data = await res.json();
-        setAnalysis(data.analysis || data.content || "분석이 완료되었습니다.");
+        await readStream(res, setAnalysis);
         setCurrentStep("analyze");
       }
     } finally {
@@ -127,20 +148,17 @@ export default function WritePage({ params }: WritePageProps) {
 
   const handleSuggest = async () => {
     setAiLoading(true);
+    setSuggestion("");
     try {
       const res = await fetch("/api/writing/suggest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          session_id: sessionId,
           analysis,
-          direction: { topic, angle, audience, tone },
         }),
       });
-
       if (res.ok) {
-        const data = await res.json();
-        setSuggestion(data.suggestion || data.content || "구조 제안이 완료되었습니다.");
+        await readStream(res, setSuggestion);
         setCurrentStep("suggest");
       }
     } finally {
@@ -150,24 +168,24 @@ export default function WritePage({ params }: WritePageProps) {
 
   const handleDraft = async () => {
     setAiLoading(true);
+    setDraft("");
     try {
       const res = await fetch("/api/writing/draft", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          session_id: sessionId,
-          suggestion,
-          scraps: scraps.map((s) => ({
-            quote: s.exact_quote,
-            note: s.user_note,
-          })),
-          direction: { topic, angle, audience, tone },
+          persona: "저널리스트",
+          materials: buildMaterials(),
+          analysis,
+          topic,
+          coreMessage: angle,
+          length: "1500",
+          emphasizedScraps: "",
+          additionalInstructions: tone ? `톤: ${tone}, 독자: ${audience}` : "",
         }),
       });
-
       if (res.ok) {
-        const data = await res.json();
-        setDraft(data.draft || data.content || "");
+        await readStream(res, setDraft);
         setCurrentStep("draft");
       }
     } finally {

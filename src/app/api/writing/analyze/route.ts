@@ -1,5 +1,6 @@
 import { PROMPTS } from "@/lib/ai/prompts";
 import { registry } from "@/lib/ai/registry";
+import { getDefaultModel } from "@/lib/ai/registry";
 import { createClient } from "@/lib/supabase/server";
 import { streamText } from "ai";
 import { NextRequest, NextResponse } from "next/server";
@@ -8,31 +9,19 @@ export const maxDuration = 30;
 
 type AnalyzeBody = {
   materials: string;
-  provider?: "openai" | "anthropic";
-  model?: string;
 };
 
 type ProviderModelId = `openai:${string}` | `anthropic:${string}`;
 
-const DEFAULT_MODELS = {
-  openai: "openai:gpt-4o",
-  anthropic: "anthropic:claude-sonnet-4-5-20250514",
-} as const;
-
-function isProviderModelId(value: string): value is ProviderModelId {
-  return value.startsWith("openai:") || value.startsWith("anthropic:");
-}
-
-function hasDataStreamResponse(value: unknown): value is { toDataStreamResponse: () => Response } {
-  if (typeof value !== "object" || value === null) {
-    return false;
+function buildModelId(provider: "openai" | "anthropic", model: string | null): ProviderModelId {
+  if (model) {
+    const candidate = `${provider}:${model}`;
+    if (candidate.startsWith("openai:") || candidate.startsWith("anthropic:")) {
+      return candidate as ProviderModelId;
+    }
   }
-
-  if (!("toDataStreamResponse" in value)) {
-    return false;
-  }
-
-  return typeof value.toDataStreamResponse === "function";
+  const fallback = `${provider}:${getDefaultModel(provider)}`;
+  return fallback as ProviderModelId;
 }
 
 export async function POST(request: NextRequest) {
@@ -57,18 +46,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "materials is required" }, { status: 400 });
     }
 
-    const provider = body.provider ?? "openai";
-    const model: ProviderModelId =
-      body.model && isProviderModelId(body.model) ? body.model : DEFAULT_MODELS[provider];
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("ai_provider, ai_model")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    const provider: "openai" | "anthropic" = profile?.ai_provider ?? "openai";
+    const model = buildModelId(provider, profile?.ai_model ?? null);
 
     const result = streamText({
       model: registry.languageModel(model),
       prompt: PROMPTS.materialsAnalysis(body.materials),
     });
-
-    if (hasDataStreamResponse(result)) {
-      return result.toDataStreamResponse();
-    }
 
     return result.toTextStreamResponse();
   } catch (error) {

@@ -34,6 +34,7 @@ export type Database = {
           role: "user" | "admin";
           ai_provider: "openai" | "anthropic" | null;
           ai_api_key_encrypted: string | null;
+          ai_model: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -47,6 +48,7 @@ export type Database = {
           role?: "user" | "admin";
           ai_provider?: "openai" | "anthropic" | null;
           ai_api_key_encrypted?: string | null;
+          ai_model?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -60,6 +62,7 @@ export type Database = {
           role?: "user" | "admin";
           ai_provider?: "openai" | "anthropic" | null;
           ai_api_key_encrypted?: string | null;
+          ai_model?: string | null;
           created_at?: string;
           updated_at?: string;
         };

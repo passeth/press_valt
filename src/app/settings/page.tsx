@@ -16,6 +16,7 @@ interface Profile {
   bio: string | null;
   press_is_public: boolean;
   ai_provider: "openai" | "anthropic" | null;
+  ai_model: string | null;
 }
 
 export default function SettingsPage() {
@@ -31,6 +32,7 @@ export default function SettingsPage() {
   const [bio, setBio] = useState("");
   const [pressIsPublic, setPressIsPublic] = useState(false);
   const [aiProvider, setAiProvider] = useState<"openai" | "anthropic" | "">("");
+  const [aiModel, setAiModel] = useState("");
 
   useEffect(() => {
     fetchProfile();
@@ -49,7 +51,7 @@ export default function SettingsPage() {
 
     const { data } = await supabase
       .from("profiles")
-      .select("handle, display_name, bio, press_is_public, ai_provider")
+      .select("handle, display_name, bio, press_is_public, ai_provider, ai_model")
       .eq("id", user.id)
       .maybeSingle();
 
@@ -59,6 +61,7 @@ export default function SettingsPage() {
       setBio(data.bio || "");
       setPressIsPublic(data.press_is_public);
       setAiProvider(data.ai_provider || "");
+      setAiModel(data.ai_model || "");
     }
 
     setLoading(false);
@@ -82,6 +85,7 @@ export default function SettingsPage() {
         bio: bio || null,
         press_is_public: pressIsPublic,
         ai_provider: aiProvider || null,
+        ai_model: aiModel || null,
       })
       .eq("id", user.id);
 
@@ -248,8 +252,23 @@ export default function SettingsPage() {
               </label>
             </div>
             <p className="text-[length:var(--text-caption)] text-text-tertiary mt-2">
-              글 작성 시 사용할 AI 모델을 선택합니다.
+              글 작성 시 사용할 AI 제공자를 선택합니다.
             </p>
+            <div className="mt-4">
+              <label className="block text-[length:var(--text-small)] font-medium mb-2">
+                모델
+              </label>
+              <input
+                type="text"
+                value={aiModel}
+                onChange={(e) => setAiModel(e.target.value)}
+                placeholder={aiProvider === "anthropic" ? "claude-sonnet-4-5-20250514" : "gpt-4o"}
+                className="w-full px-4 py-2 border border-border bg-background text-text-primary rounded-[var(--radius-input)] text-[length:var(--text-body)] placeholder:text-placeholder focus:outline-none focus:border-accent transition-colors"
+              />
+              <p className="text-[length:var(--text-caption)] text-text-tertiary mt-2">
+                비워두면 기본 모델을 사용합니다.
+              </p>
+            </div>
           </section>
 
           {/* Save */}

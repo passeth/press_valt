@@ -45,7 +45,7 @@ export default async function PressPage({ params }: PressPageProps) {
   // Fetch published posts
   const { data: posts } = await supabase
     .from("user_posts")
-    .select("slug, title, markdown, rendered_html, published_at, created_at")
+    .select("slug, title, markdown, rendered_html, published_at, created_at, thumbnail_url")
     .eq("user_id", profile.id)
     .eq("status", "published")
     .order("published_at", { ascending: false });
@@ -81,26 +81,37 @@ export default async function PressPage({ params }: PressPageProps) {
         {posts && posts.length > 0 ? (
           <div className="space-y-4">
             {posts.map((post) => (
-              <article key={post.slug} className="group border border-border bg-background p-5 transition-colors hover:bg-surface">
+              <article key={post.slug} className="group border border-border bg-background overflow-hidden transition-colors hover:bg-surface">
                 <Link
                   href={`/press/${handle}/${post.slug}`}
                   className="block"
                 >
-                  <h2 className="text-[length:var(--text-h2)] font-serif font-semibold italic text-text-primary transition-colors group-hover:text-accent">
-                    {post.title}
-                  </h2>
-                  <p className="mt-3 text-[length:var(--text-small)] text-text-secondary">
-                    {normalizeExcerpt(post.markdown)}
-                  </p>
-                  <p className="mt-4 text-[length:var(--text-caption)] text-text-secondary">
-                    {new Date(
-                      post.published_at || post.created_at
-                    ).toLocaleDateString("ko-KR", {
-                      year: "numeric",
-                      month: "long",
-                      day: "numeric",
-                    })}
-                  </p>
+                  {post.thumbnail_url && (
+                    <div className="w-full aspect-[16/9] overflow-hidden">
+                      <img
+                        src={post.thumbnail_url}
+                        alt={post.title}
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+                      />
+                    </div>
+                  )}
+                  <div className="p-5">
+                    <h2 className="text-[length:var(--text-h2)] font-serif font-semibold italic text-text-primary transition-colors group-hover:text-accent">
+                      {post.title}
+                    </h2>
+                    <p className="mt-3 text-[length:var(--text-small)] text-text-secondary">
+                      {normalizeExcerpt(post.markdown)}
+                    </p>
+                    <p className="mt-4 text-[length:var(--text-caption)] text-text-secondary">
+                      {new Date(
+                        post.published_at || post.created_at
+                      ).toLocaleDateString("ko-KR", {
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                      })}
+                    </p>
+                  </div>
                 </Link>
               </article>
             ))}

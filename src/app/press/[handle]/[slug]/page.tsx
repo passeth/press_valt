@@ -21,6 +21,7 @@ interface Scrap {
 }
 
 const USAGE_LABEL: Record<string, string> = {
+  quotation: "인용",
   quote: "직접 인용",
   paraphrase: "재서술",
   insight: "인사이트",
@@ -76,7 +77,7 @@ export default async function PressPostPage({ params }: PressPostPageProps) {
 
   const { data: post } = await supabase
     .from("user_posts")
-    .select("id, slug, title, markdown, rendered_html, published_at, created_at")
+    .select("id, slug, title, markdown, rendered_html, published_at, created_at, thumbnail_url")
     .eq("user_id", profile.id)
     .eq("slug", slug)
     .eq("status", "published")
@@ -127,6 +128,15 @@ export default async function PressPostPage({ params }: PressPostPageProps) {
             {post.title}
           </h1>
         </header>
+        {post.thumbnail_url && (
+          <div className="mt-6 w-full aspect-[16/9] overflow-hidden border border-border">
+            <img
+              src={post.thumbnail_url}
+              alt={post.title}
+              className="w-full h-full object-cover"
+            />
+          </div>
+        )}
 
         <article className="mt-8">
           {post.rendered_html ? (

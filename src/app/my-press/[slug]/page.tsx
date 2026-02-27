@@ -27,6 +27,12 @@ interface PostSource {
   usage: string;
 }
 
+interface Scrap {
+  id: string;
+  exact_quote: string;
+  user_note: string | null;
+}
+
 const STATUS_LABEL: Record<PostStatus, string> = {
   draft: "초안",
   published: "발행",
@@ -42,6 +48,7 @@ const STATUS_VARIANT: Record<PostStatus, "default" | "success" | "warning" | "er
 };
 
 const USAGE_LABEL: Record<string, string> = {
+  quotation: "인용",
   quote: "직접 인용",
   paraphrase: "재서술",
   insight: "인사이트",
@@ -56,6 +63,7 @@ export default function MyPressPostPage() {
   const [post, setPost] = useState<Post | null>(null);
   const [sources, setSources] = useState<PostSource[]>([]);
   const [loading, setLoading] = useState(true);
+  const [scraps, setScraps] = useState<Scrap[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [pendingAction, setPendingAction] = useState<"status" | "delete" | null>(null);
@@ -111,6 +119,18 @@ export default function MyPressPostPage() {
 
       setPost(detailPayload.post);
       setSources(detailPayload.sources ?? []);
+      // Fetch actual scrap data for sources
+      const scrapIds = (detailPayload.sources ?? [])
+        .map((s: PostSource) => s.scrap_id)
+        .filter(Boolean);
+      if (scrapIds.length > 0) {
+        const supabase = createClient();
+        const { data: scrapRows } = await supabase
+          .from("scraps")
+          .select("id, exact_quote, user_note")
+          .in("id", scrapIds);
+        setScraps(scrapRows ?? []);
+      }
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "알 수 없는 오류가 발생했습니다.");
     } finally {
@@ -328,16 +348,30 @@ export default function MyPressPostPage() {
                   참고 스크랩
                 </h2>
                 <ul className="mt-4 space-y-2">
-                  {sources.map((source) => (
-                    <li key={source.id} className="border border-border bg-surface p-3">
-                      <p className="text-[length:var(--text-small)] text-text-primary">
-                        {USAGE_LABEL[source.usage] ?? source.usage}
-                      </p>
-                      <p className="mt-1 text-[length:var(--text-caption)] text-text-secondary">
-                        스크랩 ID: {source.scrap_id}
-                      </p>
-                    </li>
-                  ))}
+                  {sources.map((source) => {
+                    const scrap = scraps.find((s) => s.id === source.scrap_id);
+                    return (
+                      <li key={source.id} className="border border-border bg-surface p-4">
+                        <p className="text-[length:var(--text-small)] text-text-primary">
+                          {USAGE_LABEL[source.usage] ?? source.usage}
+                        </p>
+                        {scrap?.exact_quote ? (
+                          <p className="mt-2 text-[length:var(--text-small)] italic text-text-secondary">
+                            &ldquo;{scrap.exact_quote}&rdquo;
+                          </p>
+                        ) : (
+                          <p className="mt-2 text-[length:var(--text-small)] text-text-secondary">
+                            스크랩 본문을 불러오지 못했습니다.
+                          </p>
+                        )}
+                        {scrap?.user_note && (
+                          <p className="mt-2 text-[length:var(--text-caption)] text-text-secondary">
+                            메모: {scrap.user_note}
+                          </p>
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
               </section>
             )}

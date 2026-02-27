@@ -136,6 +136,7 @@ export default function WritePage({ params }: WritePageProps) {
   // AI outputs
   const [analysis, setAnalysis] = useState("");
   const [suggestion, setSuggestion] = useState("");
+  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState<number | null>(null);
   const [draft, setDraft] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
@@ -286,7 +287,7 @@ export default function WritePage({ params }: WritePageProps) {
           persona,
           materials,
           analysis,
-          topic: topic || suggestion.split("\n")[0] || "자동 생성 주제",
+          topic: topic || (selectedSuggestionIndex !== null ? (suggestion.split(/(?=\d+\.)/).filter(Boolean)[selectedSuggestionIndex]?.split("\n")[0]?.replace(/^\d+\.\s*주제:\s*/, "").trim() || "자동 생성 주제") : suggestion.split("\n")[0]) || "자동 생성 주제",
           coreMessage: angle || "소재 기반 분석",
           length: "1500자",
           emphasizedScraps: "",
@@ -605,17 +606,57 @@ export default function WritePage({ params }: WritePageProps) {
               <h2 className="text-[length:var(--text-h2)] font-serif font-semibold italic mb-4">
                 글 구조 제안
               </h2>
+              <p className="text-[length:var(--text-small)] text-text-secondary">
+                아래 3가지 주제 중 하나를 선택해주세요. 선택한 주제를 기반으로 초안이 작성됩니다.
+              </p>
               {suggestion ? (
-                <div className="border border-border p-6 rounded-[var(--radius-card)] bg-surface">
-                  <div className="prose whitespace-pre-wrap text-[length:var(--text-small)] leading-relaxed">
-                    {suggestion}
-                  </div>
+                <div className="space-y-3">
+                  {suggestion
+                    .split(/(?=\d+\.)/)
+                    .filter((s) => s.trim())
+                    .map((block, i) => {
+                      const lines = block.trim().split("\n");
+                      const titleLine = lines[0]?.replace(/^\d+\.\s*주제:\s*/, "").trim() || "";
+                      const rest = lines.slice(1).join("\n").trim();
+                      return (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => setSelectedSuggestionIndex(i)}
+                          className={`w-full text-left p-5 border transition-colors ${
+                            selectedSuggestionIndex === i
+                              ? "border-accent bg-surface"
+                              : "border-border bg-background hover:bg-surface"
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <span className={`shrink-0 w-7 h-7 flex items-center justify-center border text-[length:var(--text-caption)] font-medium ${
+                              selectedSuggestionIndex === i
+                                ? "border-accent bg-accent text-text-inverted"
+                                : "border-border text-text-secondary"
+                            }`}>
+                              {i + 1}
+                            </span>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[length:var(--text-body)] font-semibold leading-snug">
+                                {titleLine}
+                              </p>
+                              {rest && (
+                                <p className="text-[length:var(--text-small)] text-text-secondary mt-2 whitespace-pre-wrap leading-relaxed">
+                                  {rest}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
                 </div>
               ) : aiLoading ? (
                 <div className="space-y-3">
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-4 w-5/6" />
-                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-24 w-full" />
+                  <Skeleton className="h-24 w-full" />
+                  <Skeleton className="h-24 w-full" />
                 </div>
               ) : (
                 <p className="text-text-secondary">구조 제안이 여기에 표시됩니다.</p>
@@ -627,8 +668,12 @@ export default function WritePage({ params }: WritePageProps) {
                 >
                   ← 이전
                 </Button>
-                <Button onClick={handleDraft} isLoading={aiLoading} disabled={!suggestion}>
-                  초안 작성 →
+                <Button
+                  onClick={handleDraft}
+                  isLoading={aiLoading}
+                  disabled={!suggestion || selectedSuggestionIndex === null}
+                >
+                  선택한 주제로 초안 작성 →
                 </Button>
               </div>
             </div>

@@ -183,19 +183,29 @@ export default function WritePage({ params }: WritePageProps) {
       const data = await res.json();
       setSession(data.session);
 
-      const collectionRes = await fetch(`/api/collections/${data.session.collection_id}`);
-
-      const collectionScraps: Scrap[] = [];
-      if (collectionRes.ok) {
-        const collectionData = await collectionRes.json();
-        for (const item of (collectionData.items ?? []) as CollectionItem[]) {
-          if (item.scrap) {
-            collectionScraps.push(item.scrap);
-          }
-        }
+      if (data.scraps && data.scraps.length > 0) {
+        setScraps(data.scraps);
+        return;
       }
 
-      setScraps(collectionScraps);
+      try {
+        const collectionRes = await fetch(`/api/collections/${data.session.collection_id}`);
+        const collectionScraps: Scrap[] = [];
+        if (collectionRes.ok) {
+          const collectionData = await collectionRes.json();
+          for (const item of (collectionData.items ?? []) as CollectionItem[]) {
+            if (item.scrap) {
+              collectionScraps.push(item.scrap);
+            }
+          }
+        } else {
+          console.error("Collection fetch failed:", collectionRes.status);
+        }
+        setScraps(collectionScraps);
+      } catch (err) {
+        console.error("Failed to fetch collection scraps:", err);
+        setScraps([]);
+      }
     } finally {
       setLoading(false);
     }
@@ -561,12 +571,12 @@ export default function WritePage({ params }: WritePageProps) {
         </div>
 
         {/* Step indicator */}
-        <div className="flex items-center gap-1 mb-8 pb-6 border-b border-border overflow-x-auto">
+        <div className="flex flex-wrap gap-1 mb-8 pb-6 border-b border-border">
           {STEPS.map((step, i) => (
             <button
               key={step.key}
               onClick={() => setCurrentStep(step.key)}
-              className={`shrink-0 px-3 py-1.5 text-[length:var(--text-button)] font-medium transition-colors rounded-[var(--radius-button)] ${
+              className={`px-3 py-1.5 text-[length:var(--text-caption)] font-medium transition-colors ${
                 currentStep === step.key
                   ? "bg-accent text-text-inverted"
                   : i <= STEPS.findIndex((s) => s.key === currentStep)

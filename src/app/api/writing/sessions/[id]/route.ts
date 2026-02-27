@@ -47,9 +47,43 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: artifactsError.message }, { status: 500 });
     }
 
+    let scraps: Array<{ id: string; exact_quote: string; user_note: string | null }> = [];
+    if (session.collection_id) {
+      const { data: items, error: itemsError } = await supabase
+        .from("collection_items")
+        .select("scrap_id")
+        .eq("collection_id", session.collection_id)
+        .order("position", { ascending: true });
+
+      if (itemsError) {
+        return NextResponse.json({ error: itemsError.message }, { status: 500 });
+      }
+
+      const scrapIds = (items ?? [])
+        .map((item) => item.scrap_id)
+        .filter((sid): sid is string => sid !== null);
+
+      if (scrapIds.length > 0) {
+        const { data: scrapRows, error: scrapsError } = await supabase
+          .from("scraps")
+          .select("id, exact_quote, user_note")
+          .in("id", scrapIds);
+
+        if (scrapsError) {
+          return NextResponse.json({ error: scrapsError.message }, { status: 500 });
+        }
+
+        const scrapMap = new Map((scrapRows ?? []).map((s) => [s.id, s]));
+        scraps = scrapIds
+          .map((sid) => scrapMap.get(sid))
+          .filter((s): s is { id: string; exact_quote: string; user_note: string | null } => s !== undefined);
+      }
+    }
+
     return NextResponse.json({
       session,
       artifacts: artifacts ?? [],
+      scraps,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unexpected server error";

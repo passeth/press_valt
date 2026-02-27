@@ -1,7 +1,9 @@
 "use client";
 
+import { useMemo } from "react";
 import { TextSelectionHandler } from "@/components/scrap/TextSelectionHandler";
 import { ScrapSidebar } from "@/components/scrap/ScrapSidebar";
+import { injectBlockIds } from "@/lib/content/injectBlockIds";
 
 interface Block {
   id: string;
@@ -23,13 +25,19 @@ export function ArticleContent({
   renderedHtml,
   revisionId,
   articleId,
+  blocks,
 }: ArticleContentProps) {
+  const renderedHtmlWithBlockIds = useMemo(
+    () => injectBlockIds(renderedHtml, blocks),
+    [renderedHtml, blocks]
+  );
+
   return (
     <>
       <TextSelectionHandler sourceRevisionId={revisionId}>
         <div
           className="prose"
-          dangerouslySetInnerHTML={{ __html: renderedHtml }}
+          dangerouslySetInnerHTML={{ __html: renderedHtmlWithBlockIds }}
         />
       </TextSelectionHandler>
       <ScrapSidebar articleId={articleId} />

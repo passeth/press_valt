@@ -3,6 +3,7 @@ import { TopNav } from "@/components/layout/TopNav";
 import { Footer } from "@/components/layout/Footer";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { ArticleContent } from "./ArticleContent";
+import { ArticleBookmarkBar } from "./ArticleBookmarkBar";
 import { getArticleBySlug, type ArticleDetail } from "@/lib/content/reader";
 
 type ArticlePageDetail = ArticleDetail & {
@@ -122,14 +123,17 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
               {article.summary}
             </p>
           )}
-          <div className="flex items-center gap-3 text-[length:var(--text-caption)] text-text-tertiary">
-            <time dateTime={article.created_at}>{formattedDate}</time>
-            {article.tags && article.tags.length > 0 && (
-              <>
-                <span>·</span>
-                <span>{article.tags.join(", ")}</span>
-              </>
-            )}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3 text-[length:var(--text-caption)] text-text-tertiary">
+              <time dateTime={article.created_at}>{formattedDate}</time>
+              {article.tags && article.tags.length > 0 && (
+                <>
+                  <span>·</span>
+                  <span>{article.tags.join(", ")}</span>
+                </>
+              )}
+            </div>
+            <ArticleBookmarkBar slug={slug} />
           </div>
         </header>
 
@@ -139,7 +143,7 @@ export default async function ArticlePage({ params }: ArticlePageProps) {
         {/* Article body with text selection handler */}
         <ArticleContent
           renderedHtml={article.rendered_html}
-          revisionId={article.revision_id || article.blocks[0]?.id || "local"}
+          revisionId={article.revision_id || ""}
           articleId={article.article_id}
           blocks={article.blocks}
         />

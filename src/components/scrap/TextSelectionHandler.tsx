@@ -30,6 +30,9 @@ export function TextSelectionHandler({
   const [modalOpen, setModalOpen] = useState(false);
 
   const handleMouseUp = useCallback(() => {
+    // Scrap requires a valid Supabase revision ID
+    if (!sourceRevisionId) return;
+
     // Small delay to let browser finish selection
     setTimeout(() => {
       const sel = window.getSelection();
@@ -95,19 +98,22 @@ export function TextSelectionHandler({
         },
       });
     }, 10);
-  }, []);
+  }, [sourceRevisionId]);
 
-  // Clear selection on click outside
+  // Clear selection on click outside (but not when modal is open)
+  const hasSelection = selection !== null;
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
-      if (selection && !(e.target as HTMLElement).closest("[data-scrap-btn]")) {
+      if (modalOpen) return;
+      const target = e.target as HTMLElement;
+      if (hasSelection && !target.closest("[data-scrap-btn]")) {
         setSelection(null);
       }
     };
 
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
-  }, [selection]);
+  }, [hasSelection, modalOpen]);
 
   return (
     <>
@@ -120,7 +126,7 @@ export function TextSelectionHandler({
         {children}
 
         {/* Floating scrap button — inside container for correct absolute positioning */}
-        {selection && !modalOpen && (
+        {sourceRevisionId && selection && !modalOpen && (
           <div data-scrap-btn>
             <FloatingScrapButton
               position={selection.buttonPosition}

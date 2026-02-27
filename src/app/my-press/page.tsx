@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Footer, PageContainer, TopNav } from "@/components/layout";
-import { Badge, Button, Skeleton, Tabs } from "@/components/ui";
+import { Badge, Button, Modal, Skeleton, Tabs } from "@/components/ui";
 
 type PostStatus = "draft" | "published" | "archived" | "unlisted";
 type TabKey = "all" | "draft" | "published" | "archived";
@@ -17,6 +17,11 @@ interface Post {
   published_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+interface CollectionOption {
+  id: string;
+  title: string;
 }
 
 const STATUS_LABEL: Record<PostStatus, string> = {
@@ -55,6 +60,14 @@ export default function MyPressPage() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [pendingPostId, setPendingPostId] = useState<string | null>(null);
+
+
+  const [showCollectionPicker, setShowCollectionPicker] = useState(false);
+  const [collections, setCollections] = useState<CollectionOption[]>([]);
+  const [loadingCollections, setLoadingCollections] = useState(false);
+  const [selectedCollectionId, setSelectedCollectionId] = useState("");
+  const [startingWriting, setStartingWriting] = useState(false);
+  const [writingError, setWritingError] = useState("");
 
   const fetchPosts = useCallback(async () => {
     setLoading(true);
@@ -165,11 +178,64 @@ export default function MyPressPage() {
     [router]
   );
 
+  const openCollectionPicker = async () => {
+    setShowCollectionPicker(true);
+    setWritingError("");
+    setSelectedCollectionId("");
+    setLoadingCollections(true);
+
+    try {
+      const res = await fetch("/api/collections");
+      if (!res.ok) {
+        setWritingError("컬렉션을 불러오지 못했습니다.");
+        return;
+      }
+      const data = (await res.json()) as { collections?: CollectionOption[] };
+      setCollections(data.collections ?? []);
+    } catch {
+      setWritingError("컬렉션을 불러오는 중 문제가 발생했습니다.");
+    } finally {
+      setLoadingCollections(false);
+    }
+  };
+
+  const handleStartWriting = async () => {
+    if (!selectedCollectionId) return;
+
+    setStartingWriting(true);
+    setWritingError("");
+
+    try {
+      const res = await fetch("/api/writing/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          collection_id: selectedCollectionId,
+          model_provider: "anthropic",
+          model_name: "claude-sonnet-4-20250514",
+        }),
+      });
+
+      if (res.ok) {
+        const data = (await res.json()) as { session: { id: string } };
+        router.push(`/write/${data.session.id}`);
+        return;
+      }
+
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      setWritingError(data.error ?? "글쓰기 세션 생성에 실패했습니다.");
+    } catch {
+      setWritingError("글쓰기 세션 생성 중 문제가 발생했습니다.");
+    } finally {
+      setStartingWriting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <TopNav />
 
-      <PageContainer className="py-10">
+      <PageContainer>
         <header className="mb-8 flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="text-[length:var(--text-h1)] font-serif font-semibold italic text-text-primary">
@@ -179,9 +245,14 @@ export default function MyPressPage() {
               내가 쓴 글을 관리하고 발행 상태를 바꿔보세요.
             </p>
           </div>
-          <p className="text-[length:var(--text-small)] text-text-secondary">
-            전체 글 <span className="text-text-primary">{posts.length}</span>개
-          </p>
+          <div className="flex items-center gap-3">
+            <p className="text-[length:var(--text-small)] text-text-secondary">
+              전체 글 <span className="text-text-primary">{posts.length}</span>개
+            </p>
+            <Button variant="primary" size="sm" onClick={() => void openCollectionPicker()}>
+              글 쓰기 시작
+            </Button>
+          </div>
         </header>
 
         <Tabs tabs={TABS} activeTab={activeTab} onChange={(id) => setActiveTab(id as TabKey)} />
@@ -193,7 +264,7 @@ export default function MyPressPage() {
             <Skeleton className="h-28 w-full border border-border" />
           </div>
         ) : error ? (
-          <div className="mt-6 border border-border bg-surface p-6">
+          <div className="mt-6 border border-border bg-surface p-[var(--section-padding)] rounded-[var(--radius-card)]">
             <p className="text-[length:var(--text-body)] text-text-primary">글 목록을 불러오지 못했습니다.</p>
             <p className="mt-2 text-[length:var(--text-small)] text-text-secondary">{error}</p>
             <Button variant="secondary" size="sm" className="mt-4" onClick={fetchPosts}>
@@ -269,13 +340,13 @@ export default function MyPressPage() {
           <div className="mt-6 border border-border bg-surface p-8 text-center">
             <p className="text-[length:var(--text-body)] text-text-primary">아직 글이 없습니다.</p>
             <p className="mt-2 text-[length:var(--text-small)] text-text-secondary">
-              아티클을 둘러보고 글쓰기를 시작해보세요.
+              아티클을 둘러보고 소재를 모은 뒤 글쓰기를 시작해보세요.
             </p>
             <div className="mt-5 flex flex-wrap justify-center gap-2">
               <Button variant="secondary" size="sm" onClick={() => router.push("/articles")}>
                 아티클 둘러보기
               </Button>
-              <Button variant="primary" size="sm" onClick={() => router.push("/collections")}>
+              <Button variant="primary" size="sm" onClick={() => void openCollectionPicker()}>
                 글 쓰기 시작
               </Button>
             </div>
@@ -284,6 +355,82 @@ export default function MyPressPage() {
       </PageContainer>
 
       <Footer />
+
+
+      <Modal
+        isOpen={showCollectionPicker}
+        onClose={() => setShowCollectionPicker(false)}
+        title="글 쓰기 — 컬렉션 선택"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-[length:var(--text-small)] text-text-secondary">
+            소재를 모아둔 컬렉션을 선택하면 AI가 분석하여 글쓰기를 도와줍니다.
+          </p>
+
+          {loadingCollections ? (
+            <div className="space-y-2">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+          ) : collections.length > 0 ? (
+            <div className="space-y-1 max-h-60 overflow-y-auto">
+              {collections.map((col) => (
+                <button
+                  key={col.id}
+                  type="button"
+                  onClick={() => setSelectedCollectionId(col.id)}
+                  className={`w-full text-left px-4 py-3 border transition-colors ${
+                    selectedCollectionId === col.id
+                      ? "border-accent bg-surface"
+                      : "border-border bg-background hover:bg-surface"
+                  }`}
+                >
+                  <span className="text-[length:var(--text-body)] text-text-primary">
+                    {col.title}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="border border-border bg-surface p-4 text-center">
+              <p className="text-[length:var(--text-small)] text-text-secondary mb-3">
+                아직 컬렉션이 없습니다. 아티클에서 소재를 스크랩하여 컬렉션을 만들어보세요.
+              </p>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setShowCollectionPicker(false);
+                  router.push("/articles");
+                }}
+              >
+                아티클 둘러보기
+              </Button>
+            </div>
+          )}
+
+          {writingError && (
+            <p className="text-[length:var(--text-small)] text-error">{writingError}</p>
+          )}
+
+          {collections.length > 0 && (
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <Button variant="ghost" size="sm" onClick={() => setShowCollectionPicker(false)}>
+                취소
+              </Button>
+              <Button
+                size="sm"
+                disabled={!selectedCollectionId}
+                isLoading={startingWriting}
+                onClick={() => void handleStartWriting()}
+              >
+                글쓰기 시작
+              </Button>
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }

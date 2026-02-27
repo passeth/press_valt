@@ -8,25 +8,15 @@ import { createClient } from '@supabase/supabase-js';
 interface Frontmatter {
   title: string;
   slug: string;
-  journalist: string;
-  persona_role: string;
-  category: string;
-  tags: string[];
-  date: string;
-  updated: string;
-  featured_image: string;
-  excerpt: string;
-  status: string;
-  featured: boolean;
-  homepage_priority: number;
-  reading_time: string;
-}
-
-interface ContentBlock {
-  block_id: string;
-  type: string;
-  plain_text: string;
-  html: string;
+  category?: string;
+  tags?: string[];
+  date?: string;
+  excerpt?: string;
+  summary?: string;
+  status?: string;
+  featured_image?: string;
+  thumbnail_url?: string;
+  [key: string]: unknown;
 }
 
 interface SyncResult {
@@ -47,98 +37,16 @@ if (!supabaseUrl || !supabaseServiceKey) {
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-/**
- * Compute SHA256 hash of content
- */
 function computeHash(content: string): string {
   return crypto.createHash('sha256').update(content).digest('hex');
 }
 
-/**
- * Extract plain text from markdown by removing markdown syntax
- */
-function extractPlainText(markdown: string): string {
-  return markdown
-    .replace(/^#+\s+/gm, '') // Remove headings
-    .replace(/\*\*(.*?)\*\*/g, '$1') // Remove bold
-    .replace(/\*(.*?)\*/g, '$1') // Remove italic
-    .replace(/\[(.*?)\]\(.*?\)/g, '$1') // Remove links
-    .replace(/`(.*?)`/g, '$1') // Remove inline code
-    .replace(/^[-*+]\s+/gm, '') // Remove list markers
-    .replace(/^>\s+/gm, '') // Remove blockquotes
-    .trim();
-}
-
-/**
- * Parse markdown into blocks
- */
-async function parseMarkdownBlocks(markdown: string): Promise<ContentBlock[]> {
-  const blocks: ContentBlock[] = [];
-  const tokens = marked.lexer(markdown);
-
-  let blockIndex = 0;
-
-  for (const token of tokens) {
-    let blockType = '';
-    let plainText = '';
-    let html = '';
-
-    switch (token.type) {
-      case 'heading':
-        blockType = 'heading';
-        plainText = token.text;
-        html = await marked.parse(`${'#'.repeat(token.depth)} ${token.text}`);
-        break;
-
-      case 'paragraph':
-        blockType = 'paragraph';
-        plainText = extractPlainText(token.text);
-        html = await marked.parse(token.text);
-        break;
-
-      case 'list':
-        blockType = 'list';
-        plainText = token.raw
-          .split('\n')
-          .map((line: string) => extractPlainText(line))
-          .join(' ');
-        html = await marked.parse(token.raw);
-        break;
-
-      case 'blockquote':
-        blockType = 'blockquote';
-        plainText = extractPlainText(token.text);
-        html = await marked.parse(token.raw);
-        break;
-
-      case 'code':
-        blockType = 'code';
-        plainText = token.text;
-        html = await marked.parse(token.raw);
-        break;
-
-      case 'image':
-        blockType = 'image';
-        plainText = token.text || (token as unknown as { url?: string }).url || '';
-        html = await marked.parse(token.raw);
-        break;
-
-      default:
-        continue;
-    }
-
-    if (blockType) {
-      blocks.push({
-        block_id: `${blockType}-${blockIndex}`,
-        type: blockType,
-        plain_text: plainText,
-        html: html.trim(),
-      });
-      blockIndex++;
-    }
-  }
-
-  return blocks;
+function normalizeFeaturedImage(imagePath: string | null | undefined): string | null {
+  if (!imagePath) return null;
+  if (imagePath.startsWith('http')) return imagePath;
+  const filename = imagePath.split('/').pop();
+  if (!filename) return null;
+  return `/images/content/${filename}`;
 }
 
 /**
@@ -151,28 +59,16 @@ async function readMarkdownFiles(
 
   async function walk(dir: string): Promise<void> {
     const entries = await fs.readdir(dir, { withFileTypes: true });
-
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
-
-      // Skip directories starting with underscore
       if (entry.isDirectory()) {
-        if (!entry.name.startsWith('_')) {
-          await walk(fullPath);
-        }
+        if (!entry.name.startsWith('_')) await walk(fullPath);
         continue;
       }
-
-      // Process .md files
       if (entry.isFile() && entry.name.endsWith('.md')) {
         const content = await fs.readFile(fullPath, 'utf-8');
         const { data, content: markdown } = matter(content);
-
-        files.push({
-          filepath: fullPath,
-          frontmatter: data as Frontmatter,
-          markdown,
-        });
+        files.push({ filepath: fullPath, frontmatter: data as Frontmatter, markdown });
       }
     }
   }
@@ -183,6 +79,11 @@ async function readMarkdownFiles(
 
 /**
  * Main sync function
+ * 
+ * DB schema:
+ *   admin_articles: id, slug, title, summary, category, tags, thumbnail_url, status, published_revision_id, created_by, created_at, updated_at
+ *   admin_article_revisions: id, article_id, markdown, content_hash, rendered_html, created_at
+ *   admin_article_blocks: id, revision_id, block_id, block_type, plain_text, markdown_text, order_index
  */
 async function syncContent(): Promise<void> {
   const contentDir = path.join(process.cwd(), 'content');
@@ -191,103 +92,165 @@ async function syncContent(): Promise<void> {
   console.log('📚 Starting content sync...');
 
   try {
-    // Read all markdown files
     const markdownFiles = await readMarkdownFiles(contentDir);
     console.log(`Found ${markdownFiles.length} markdown files`);
 
-    // Fetch existing articles from database
+    // Fetch existing articles
     const { data: existingArticles, error: fetchError } = await supabase
-      .from('articles')
-      .select('slug, content_hash');
+      .from('admin_articles')
+      .select('id, slug');
 
     if (fetchError) {
       throw new Error(`Failed to fetch existing articles: ${fetchError.message}`);
     }
 
-    const existingSlugs = new Set(existingArticles?.map((a) => a.slug) || []);
-    const existingHashMap = new Map(
-      existingArticles?.map((a) => [a.slug, a.content_hash]) || []
+    const existingMap = new Map(
+      existingArticles?.map((a) => [a.slug, a.id]) || []
     );
 
-    // Process each markdown file
+    // Check existing revision hashes
+    const { data: existingRevisions } = await supabase
+      .from('admin_article_revisions')
+      .select('article_id, content_hash');
+
+    const revisionHashMap = new Map(
+      existingRevisions?.map((r) => [r.article_id, r.content_hash]) || []
+    );
+
     for (const file of markdownFiles) {
       const { frontmatter, markdown } = file;
 
-      // Skip unpublished articles
-      if (frontmatter.status !== 'published') {
+      if (!frontmatter.slug || !frontmatter.title) {
+        result.skipped++;
+        console.log(`⏭️  Skipped (no slug/title): ${file.filepath}`);
+        continue;
+      }
+
+      if (frontmatter.status && frontmatter.status !== 'published') {
         result.skipped++;
         console.log(`⏭️  Skipped (not published): ${frontmatter.slug}`);
         continue;
       }
 
       const contentHash = computeHash(markdown);
-      const htmlContent = await marked.parse(markdown);
-      const blocks = await parseMarkdownBlocks(markdown);
+      const existingId = existingMap.get(frontmatter.slug);
+      const existingHash = existingId ? revisionHashMap.get(existingId) : null;
 
-      const isNew = !existingSlugs.has(frontmatter.slug);
-      const hasChanged = isNew || existingHashMap.get(frontmatter.slug) !== contentHash;
-
-      if (!hasChanged) {
+      if (existingId && existingHash === contentHash) {
         result.skipped++;
         console.log(`⏭️  Skipped (unchanged): ${frontmatter.slug}`);
         continue;
       }
 
+      const summary = frontmatter.summary || frontmatter.excerpt || null;
+      const thumbnailUrl = normalizeFeaturedImage(frontmatter.featured_image) || frontmatter.thumbnail_url || null;
+
       try {
         // Upsert article
         const { data: article, error: articleError } = await supabase
-          .from('articles')
+          .from('admin_articles')
           .upsert(
             {
               slug: frontmatter.slug,
               title: frontmatter.title,
-              excerpt: frontmatter.excerpt,
-              category: frontmatter.category,
-              featured: frontmatter.featured,
-              featured_image: frontmatter.featured_image,
-              homepage_priority: frontmatter.homepage_priority,
-              content_hash: contentHash,
-              updated_at: new Date(frontmatter.updated).toISOString(),
+              summary,
+              category: frontmatter.category || null,
+              tags: frontmatter.tags || [],
+              thumbnail_url: thumbnailUrl,
+              status: 'published',
+              updated_at: new Date().toISOString(),
             },
             { onConflict: 'slug' }
           )
-          .select()
+          .select('id')
           .single();
 
         if (articleError) {
           throw new Error(`Failed to upsert article: ${articleError.message}`);
         }
 
+        // Render HTML
+        const renderedHtml = await marked.parse(markdown);
+
         // Insert revision
-        const { error: revisionError } = await supabase
-          .from('article_revisions')
+        const { data: revision, error: revisionError } = await supabase
+          .from('admin_article_revisions')
           .insert({
             article_id: article.id,
-            journalist: frontmatter.journalist,
-            persona_role: frontmatter.persona_role,
+            markdown,
             content_hash: contentHash,
-            html_content: htmlContent,
-            reading_time: frontmatter.reading_time,
-            tags: frontmatter.tags,
-            created_at: new Date().toISOString(),
-          });
+            rendered_html: renderedHtml,
+          })
+          .select('id')
+          .single();
 
         if (revisionError) {
           throw new Error(`Failed to insert revision: ${revisionError.message}`);
         }
 
-        // Insert content blocks
-        const blockInserts = blocks.map((block) => ({
-          article_id: article.id,
-          block_id: block.block_id,
-          type: block.type,
-          plain_text: block.plain_text,
-          html: block.html,
-        }));
+        // Update published_revision_id
+        await supabase
+          .from('admin_articles')
+          .update({ published_revision_id: revision.id })
+          .eq('id', article.id);
+
+        // Parse and insert blocks
+        const tokens = marked.lexer(markdown);
+        let blockIndex = 0;
+        const blockInserts: Array<{
+          revision_id: string;
+          block_id: string;
+          block_type: string;
+          plain_text: string;
+          markdown_text: string;
+          order_index: number;
+        }> = [];
+
+        for (const token of tokens) {
+          let blockType = '';
+          let plainText = '';
+
+          switch (token.type) {
+            case 'heading':
+              blockType = 'heading';
+              plainText = token.text;
+              break;
+            case 'paragraph':
+              blockType = 'paragraph';
+              plainText = token.text;
+              break;
+            case 'list':
+              blockType = 'list';
+              plainText = token.raw;
+              break;
+            case 'blockquote':
+              blockType = 'blockquote';
+              plainText = token.text;
+              break;
+            case 'code':
+              blockType = 'code';
+              plainText = token.text;
+              break;
+            default:
+              continue;
+          }
+
+          if (blockType) {
+            blockInserts.push({
+              revision_id: revision.id,
+              block_id: `${blockType}-${blockIndex}`,
+              block_type: blockType,
+              plain_text: plainText,
+              markdown_text: token.raw,
+              order_index: blockIndex,
+            });
+            blockIndex++;
+          }
+        }
 
         if (blockInserts.length > 0) {
           const { error: blocksError } = await supabase
-            .from('content_blocks')
+            .from('admin_article_blocks')
             .insert(blockInserts);
 
           if (blocksError) {
@@ -295,12 +258,12 @@ async function syncContent(): Promise<void> {
           }
         }
 
-        if (isNew) {
-          result.created++;
-          console.log(`✅ Created: ${frontmatter.slug}`);
-        } else {
+        if (existingId) {
           result.updated++;
           console.log(`🔄 Updated: ${frontmatter.slug}`);
+        } else {
+          result.created++;
+          console.log(`✅ Created: ${frontmatter.slug}`);
         }
       } catch (error) {
         console.error(`❌ Error processing ${frontmatter.slug}:`, error);
@@ -310,11 +273,11 @@ async function syncContent(): Promise<void> {
 
     // Archive articles that no longer exist in file system
     const fileSlugs = new Set(markdownFiles.map((f) => f.frontmatter.slug));
-    for (const slug of existingSlugs) {
+    for (const [slug] of existingMap) {
       if (!fileSlugs.has(slug)) {
         const { error: archiveError } = await supabase
-          .from('articles')
-          .update({ archived_at: new Date().toISOString() })
+          .from('admin_articles')
+          .update({ status: 'archived' })
           .eq('slug', slug);
 
         if (archiveError) {
@@ -326,18 +289,15 @@ async function syncContent(): Promise<void> {
       }
     }
 
-    // Log summary
-    console.log('\n📊 Sync Summary:');
-    console.log(`  ✅ Created:  ${result.created}`);
-    console.log(`  🔄 Updated:  ${result.updated}`);
+    console.log('\n📊 Sync complete:');
+    console.log(`  ✅ Created: ${result.created}`);
+    console.log(`  🔄 Updated: ${result.updated}`);
     console.log(`  📦 Archived: ${result.archived}`);
-    console.log(`  ⏭️  Skipped:  ${result.skipped}`);
-    console.log('✨ Content sync complete!\n');
+    console.log(`  ⏭️  Skipped: ${result.skipped}`);
   } catch (error) {
     console.error('❌ Sync failed:', error);
     process.exit(1);
   }
 }
 
-// Run sync
 syncContent();

@@ -246,23 +246,35 @@ export type Database = {
         Row: {
           id: string;
           collection_id: string;
-          scrap_id: string;
+          scrap_id: string | null;
+          article_id: string | null;
           position: number;
+          note: string | null;
+          highlight_color: "yellow" | "green" | "blue" | "pink" | "purple" | null;
           created_at: string;
+          updated_at: string;
         };
         Insert: {
           id?: string;
           collection_id: string;
-          scrap_id: string;
+          scrap_id?: string | null;
+          article_id?: string | null;
           position: number;
+          note?: string | null;
+          highlight_color?: "yellow" | "green" | "blue" | "pink" | "purple" | null;
           created_at?: string;
+          updated_at?: string;
         };
         Update: {
           id?: string;
           collection_id?: string;
-          scrap_id?: string;
+          scrap_id?: string | null;
+          article_id?: string | null;
           position?: number;
+          note?: string | null;
+          highlight_color?: "yellow" | "green" | "blue" | "pink" | "purple" | null;
           created_at?: string;
+          updated_at?: string;
         };
       };
 

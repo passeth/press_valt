@@ -51,7 +51,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
     const { data: items, error: itemsError } = await supabase
       .from("collection_items")
-      .select("id, collection_id, scrap_id, position, created_at")
+      .select("id, collection_id, scrap_id, article_id, position, note, highlight_color, created_at, updated_at")
       .eq("collection_id", id)
       .order("position", { ascending: true });
 
@@ -59,7 +59,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: itemsError.message }, { status: 500 });
     }
 
-    const scrapIds = items?.map((item) => item.scrap_id) ?? [];
+    const scrapIds = (items ?? []).map((item) => item.scrap_id).filter((id): id is string => id !== null);
     let scrapsById = new Map<string, unknown>();
 
     if (scrapIds.length > 0) {
@@ -77,7 +77,7 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
     const detailItems = (items ?? []).map((item) => ({
       ...item,
-      scrap: scrapsById.get(item.scrap_id) ?? null,
+      scrap: item.scrap_id ? (scrapsById.get(item.scrap_id) ?? null) : null,
     }));
 
     const { data: notes, error: notesError } = await supabase

@@ -21,9 +21,13 @@ interface Scrap {
 interface CollectionItem {
   id: string;
   collection_id: string;
-  scrap_id: string;
+  scrap_id: string | null;
+  article_id: string | null;
   position: number;
+  note: string | null;
+  highlight_color: "yellow" | "green" | "blue" | "pink" | "purple" | null;
   created_at: string;
+  updated_at: string;
   scrap: Scrap | null;
 }
 
@@ -377,7 +381,17 @@ export default function CollectionDetailPage({ params }: CollectionDetailPagePro
             {items.map((item, index) => (
               <div
                 key={item.id}
-                className="border border-border bg-background p-5 transition-colors hover:bg-surface"
+                className={`border bg-background p-5 transition-colors hover:bg-surface ${
+                  item.highlight_color
+                    ? {
+                        yellow: "border-l-4 border-l-yellow-400 border-t border-r border-b border-border",
+                        green: "border-l-4 border-l-green-400 border-t border-r border-b border-border",
+                        blue: "border-l-4 border-l-blue-400 border-t border-r border-b border-border",
+                        pink: "border-l-4 border-l-pink-400 border-t border-r border-b border-border",
+                        purple: "border-l-4 border-l-purple-400 border-t border-r border-b border-border",
+                      }[item.highlight_color]
+                    : "border border-border"
+                }`}
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
@@ -406,6 +420,11 @@ export default function CollectionDetailPage({ params }: CollectionDetailPagePro
                     ) : (
                       <p className="text-text-tertiary text-[length:var(--text-small)]">
                         스크랩 데이터를 불러올 수 없습니다.
+                      </p>
+                    )}
+                    {item.note && (
+                      <p className="text-[length:var(--text-caption)] text-text-secondary mt-2 border-l-2 border-border pl-3">
+                        {item.note}
                       </p>
                     )}
                   </div>

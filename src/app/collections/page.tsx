@@ -131,6 +131,8 @@ export default function CollectionsPage() {
       setScrapCounts((prev) => ({ ...prev, [data.collection.id]: 0 }));
       setNewTitle("");
       setNewDescription("");
+    } catch {
+      setError("컬렉션 생성 중 문제가 발생했습니다.");
     } finally {
       setCreating(false);
     }

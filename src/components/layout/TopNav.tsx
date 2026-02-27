@@ -44,10 +44,10 @@ export function TopNav() {
     pathname === href || pathname.startsWith(href + "/");
 
   return (
-    <header className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b border-border">
-      <nav className="mx-auto flex max-w-[var(--width-content)] items-center justify-between px-16 h-[60px]">
+    <header className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b border-border rounded-b-[var(--radius-nav)]">
+      <nav className="mx-auto flex max-w-[var(--width-content)] items-center justify-between px-[var(--page-padding-x)] h-[var(--nav-height)]">
         {/* Left — navigation links */}
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-[var(--nav-gap)]">
           {NAV_LINKS.filter((link) => !link.auth || user).map((link) => (
             <Link
               key={link.href}
@@ -72,7 +72,7 @@ export function TopNav() {
         </Link>
 
         {/* Right — auth + dashboard */}
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-[var(--nav-gap)]">
           {loading ? (
             <span className="w-16 h-4 bg-surface animate-pulse" />
           ) : user ? (

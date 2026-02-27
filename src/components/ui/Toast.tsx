@@ -14,7 +14,7 @@ export function ToastContainer() {
   return (
     <div className="fixed top-4 right-4 z-50 flex flex-col gap-2">
       {toasts.map((toast) => (
-        <div key={toast.id} className="bg-background border border-border shadow-md px-4 py-3 flex items-center gap-3 animate-slide-down min-w-[280px]">
+        <div key={toast.id} className="bg-background border border-border shadow-md px-4 py-3 flex items-center gap-3 animate-slide-down min-w-[280px] rounded-[var(--radius-card)]">
           <span className={`font-bold ${iconColors[toast.type]}`}>{icons[toast.type]}</span>
           <span className="flex-1 text-[length:var(--text-small)]">{toast.message}</span>
           <button onClick={() => remove(toast.id)} className="text-text-tertiary hover:text-text-primary text-xs">✕</button>

@@ -115,7 +115,7 @@ export default async function PressPostPage({ params }: PressPostPageProps) {
     <div className="min-h-screen flex flex-col bg-background">
       <TopNav />
 
-      <PageContainer maxWidth="article" className="py-10">
+      <PageContainer maxWidth="article">
         <Link
           href={`/press/${handle}`}
           className="text-[length:var(--text-caption)] text-text-secondary transition-colors hover:text-text-primary"

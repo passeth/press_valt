@@ -209,7 +209,7 @@ export default function MyPressPostPage() {
     <div className="min-h-screen flex flex-col bg-background">
       <TopNav />
 
-      <PageContainer maxWidth="article" className="py-10">
+      <PageContainer maxWidth="article">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-2 border-b border-border pb-4">
           <Link
             href="/my-press"
@@ -264,7 +264,7 @@ export default function MyPressPostPage() {
             </Link>
           </section>
         ) : error ? (
-          <section className="border border-border bg-surface p-6">
+          <section className="border border-border bg-surface p-[var(--section-padding)] rounded-[var(--radius-card)]">
             <p className="text-[length:var(--text-body)] text-text-primary">글을 불러오지 못했습니다.</p>
             <p className="mt-2 text-[length:var(--text-small)] text-text-secondary">{error}</p>
             <Button variant="secondary" size="sm" className="mt-4" onClick={loadPost}>

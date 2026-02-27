@@ -8,8 +8,8 @@ export default function HomePage() {
       <TopNav />
 
       {/* Hero */}
-      <main className="flex-1 flex items-center justify-center px-16">
-        <div className="max-w-2xl text-center">
+      <main className="flex-1 flex items-center justify-center px-[var(--page-padding-x)]">
+        <div className="max-w-[var(--hero-max-width)] text-center">
           <h1 className="text-[length:var(--text-display)] font-serif font-bold italic tracking-[-2px] leading-[1.05] mb-6">
             읽고, 모으고, 쓰는
             <br />
@@ -23,13 +23,13 @@ export default function HomePage() {
           <div className="flex items-center justify-center gap-4">
             <Link
               href="/articles"
-              className="inline-flex items-center justify-center bg-accent px-6 py-3 text-[length:var(--text-body)] font-medium text-text-inverted hover:bg-accent-hover transition-colors"
+              className="inline-flex items-center justify-center bg-accent px-[var(--button-padding-x)] py-[var(--button-padding-y)] text-[length:var(--text-body)] font-medium text-text-inverted hover:bg-accent-hover transition-colors rounded-[var(--radius-button)]"
             >
               아티클 둘러보기
             </Link>
             <Link
               href="/signup"
-              className="inline-flex items-center justify-center border border-border px-6 py-3 text-[length:var(--text-body)] font-medium text-text-primary hover:bg-surface transition-colors"
+              className="inline-flex items-center justify-center border border-border px-[var(--button-padding-x)] py-[var(--button-padding-y)] text-[length:var(--text-body)] font-medium text-text-primary hover:bg-surface transition-colors rounded-[var(--radius-button)]"
             >
               시작하기
             </Link>

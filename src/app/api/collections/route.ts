@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
         id: user.id,
         display_name:
           user.user_metadata?.display_name ?? user.user_metadata?.name ?? null,
-        handle: user.user_metadata?.handle ?? null,
+        handle: user.user_metadata?.handle ?? user.email?.split("@")[0] ?? `user_${user.id.slice(0, 8)}`,
       },
       { onConflict: "id", ignoreDuplicates: true }
     );

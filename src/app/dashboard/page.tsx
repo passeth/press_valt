@@ -83,7 +83,7 @@ export default async function DashboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-12">
           <Link
             href="/collections"
-            className="border border-border p-6 hover:bg-surface transition-colors group"
+            className="border border-border p-[var(--section-padding)] rounded-[var(--radius-card)] hover:bg-surface transition-colors group"
           >
             <p className="text-[length:var(--text-caption)] text-text-tertiary uppercase tracking-[1px] mb-2">
               스크랩
@@ -94,7 +94,7 @@ export default async function DashboardPage() {
           </Link>
           <Link
             href="/collections"
-            className="border border-border p-6 hover:bg-surface transition-colors group"
+            className="border border-border p-[var(--section-padding)] rounded-[var(--radius-card)] hover:bg-surface transition-colors group"
           >
             <p className="text-[length:var(--text-caption)] text-text-tertiary uppercase tracking-[1px] mb-2">
               컬렉션
@@ -105,7 +105,7 @@ export default async function DashboardPage() {
           </Link>
           <Link
             href="/my-press"
-            className="border border-border p-6 hover:bg-surface transition-colors group"
+            className="border border-border p-[var(--section-padding)] rounded-[var(--radius-card)] hover:bg-surface transition-colors group"
           >
             <p className="text-[length:var(--text-caption)] text-text-tertiary uppercase tracking-[1px] mb-2">
               발행한 글

@@ -116,6 +116,8 @@ export async function POST(request: NextRequest) {
       selector: body.selector,
     };
 
+    console.log("[SCRAPS API] Inserting with source_block_id:", body.source_block_id, "type:", typeof body.source_block_id);
+
     const { data: scrap, error: scrapError } = await supabase
       .from("scraps")
       .insert(payload)

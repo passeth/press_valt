@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BookmarkButton } from "./BookmarkButton";
 
 interface ArticleCardProps {
   slug: string;
@@ -26,10 +27,11 @@ export function ArticleCard({
   });
 
   return (
-    <article className="group">
+    <article className="group relative">
+      <BookmarkButton slug={slug} size="sm" className="absolute top-2 right-2 z-10 bg-background/70 backdrop-blur-sm" />
       <Link href={`/articles/${slug}`} className="block">
         {/* Thumbnail */}
-        <div className="aspect-[16/10] bg-surface mb-4 overflow-hidden">
+        <div className="aspect-[16/10] bg-surface mb-4 overflow-hidden rounded-[var(--radius-card)]">
           {thumbnail_url ? (
             <img
               src={thumbnail_url}

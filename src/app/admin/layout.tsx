@@ -9,7 +9,7 @@ export default function AdminLayout({
     <div className="flex min-h-screen">
       {/* Sidebar */}
       <aside className="w-60 border-r border-border bg-surface fixed left-0 top-0 h-screen">
-        <div className="p-6">
+        <div className="p-[var(--section-padding)]">
           <Link href="/admin" className="block text-sm font-bold tracking-tight mb-8">
             Press Vault Admin
           </Link>

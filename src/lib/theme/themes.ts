@@ -15,7 +15,7 @@ export const THEMES: ThemeInfo[] = [
   {
     id: "midnight",
     name: "Midnight",
-    description: "Dark editorial mode with luminous contrast for focused reading.",
+    description: "Warm cream palette with rounded geometry and generous spacing.",
   },
   {
     id: "forest",

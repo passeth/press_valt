@@ -65,7 +65,7 @@ export default async function PressPage({ params }: PressPageProps) {
     <div className="min-h-screen flex flex-col bg-background">
       <TopNav />
 
-      <PageContainer maxWidth="article" className="py-10">
+      <PageContainer maxWidth="article">
         <header className="mb-10 border-b border-border pb-6">
           <p className="text-[length:var(--text-caption)] uppercase tracking-[0.08em] text-text-secondary">
             공개 프레스

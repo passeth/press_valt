@@ -7,7 +7,7 @@ interface SkeletonProps {
 export function Skeleton({ className = "", width, height }: SkeletonProps) {
   return (
     <div
-      className={`animate-pulse bg-surface ${className}`}
+      className={`animate-pulse bg-surface rounded-[var(--radius-card)] ${className}`}
       style={{ width, height }}
     />
   );

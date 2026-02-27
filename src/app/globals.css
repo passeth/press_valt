@@ -77,17 +77,44 @@
   --spacing-prose-heading-gap-lg: 0.75rem;
   --spacing-prose-heading-gap-md: 0.5rem;
 
-  /* Layout */
+  /* Layout — Structure */
   --width-content: 90rem;       /* 1440px */
   --width-article: 45rem;       /* 720px */
   --line-height-body: 1.6;
   --line-height-prose: 1.75;
+
+  /* Layout — Component tokens */
+  --nav-height: 60px;
+  --page-padding-x: 4rem;
+  --page-padding-y: 2.5rem;
+  --footer-padding-y: 2rem;
+  --nav-gap: 1.5rem;
+  --section-padding: 1.5rem;
+  --section-gap: 1.5rem;
+  --hero-max-width: 42rem;
+  --button-padding-x: 1.5rem;
+  --button-padding-y: 0.75rem;
+  --card-gap: 0.75rem;
+  --modal-padding: 1.5rem;
 
   --prose-blockquote-border-width: 3px;
   --prose-blockquote-padding-left: 1rem;
   --prose-code-padding-y: 0.125rem;
   --prose-code-padding-x: 0.375rem;
   --prose-code-scale: 0.9em;
+
+  /* Border Radius */
+  --radius-none: 0px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-pill: 9999px;
+  --radius-card: 0px;
+  --radius-button: 0px;
+  --radius-input: 0px;
+  --radius-badge: 0px;
+  --radius-nav: 0px;
 
   /* Animations */
   --animate-fade-in: fade-in 0.2s ease-out;
@@ -123,35 +150,72 @@
   --font-style-h1: italic;
   --font-style-h2: italic;
   --font-style-h3: normal;
+  --nav-height: 60px;
+  --page-padding-x: 4rem;
+  --page-padding-y: 2.5rem;
+  --footer-padding-y: 2rem;
+  --nav-gap: 1.5rem;
+  --section-padding: 1.5rem;
+  --section-gap: 1.5rem;
+  --hero-max-width: 42rem;
+  --button-padding-x: 1.5rem;
+  --button-padding-y: 0.75rem;
+  --card-gap: 0.75rem;
+  --modal-padding: 1.5rem;
+  --radius-card: 0px;
+  --radius-button: 0px;
+  --radius-input: 0px;
+  --radius-badge: 0px;
+  --radius-nav: 0px;
 }
 
 [data-theme="midnight"] {
-  --color-background: #1A1A19;
-  --color-surface: #252524;
-  --color-surface-warm: #2E2E2D;
-  --color-border: #3A3937;
-  --color-border-light: #4A4946;
-  --color-inverted: #F0EDE8;
-  --color-text-primary: #F0EDE8;
-  --color-text-secondary: #C5C0B8;
-  --color-text-tertiary: #AAA49A;
-  --color-text-muted: #A7A197;
-  --color-text-inverted: #1A1A19;
-  --color-placeholder: #7F7A72;
-  --color-accent: #E8E5DF;
-  --color-accent-hover: #F5F2ED;
-  --color-highlight: #3E3A2E;
-  --color-highlight-active: #55503E;
-  --color-error: #F87171;
-  --color-success: #4ADE80;
-  --color-warning: #FBBF24;
+  /* Amplemarket-inspired: warm cream, rounded, generous spacing */
+  --color-background: #F5F3EF;
+  --color-surface: #FFFFFF;
+  --color-surface-warm: #EDEAE5;
+  --color-border: #E2DDD6;
+  --color-border-light: #EEEAE4;
+  --color-inverted: #1A1A1A;
+  --color-text-primary: #1A1A1A;
+  --color-text-secondary: #6B6B6B;
+  --color-text-tertiary: #999999;
+  --color-text-muted: #737373;
+  --color-text-inverted: #FFFFFF;
+  --color-placeholder: #B5AFA8;
+  --color-accent: #1A1A1A;
+  --color-accent-hover: #333333;
+  --color-highlight: #FBF0A1;
+  --color-highlight-active: #FDE68A;
+  --color-error: #DC2626;
+  --color-success: #16A34A;
+  --color-warning: #F59E0B;
   --font-weight-body: 400;
-  --font-weight-h1: 600;
-  --font-weight-h2: 600;
+  --font-weight-h1: 500;
+  --font-weight-h2: 500;
   --font-weight-h3: 500;
   --font-style-h1: normal;
-  --font-style-h2: italic;
+  --font-style-h2: normal;
   --font-style-h3: normal;
+  --nav-height: 52px;
+  --page-padding-x: 5rem;
+  --page-padding-y: 3.5rem;
+  --footer-padding-y: 3rem;
+  --nav-gap: 2rem;
+  --section-padding: 2rem;
+  --section-gap: 1rem;
+  --hero-max-width: 44rem;
+  --button-padding-x: 1.5rem;
+  --button-padding-y: 0.75rem;
+  --card-gap: 1rem;
+  --modal-padding: 2rem;
+  --radius-card: 16px;
+  --radius-button: 8px;
+  --radius-input: 8px;
+  --radius-badge: 9999px;
+  --radius-nav: 16px;
+  --shadow-soft: 0 1px 3px rgb(0 0 0 / 0.06);
+  --shadow-medium: 0 8px 30px rgb(0 0 0 / 0.08);
 }
 
 [data-theme="forest"] {
@@ -181,6 +245,23 @@
   --font-style-h1: italic;
   --font-style-h2: normal;
   --font-style-h3: normal;
+  --nav-height: 56px;
+  --page-padding-x: 3.5rem;
+  --page-padding-y: 2.5rem;
+  --footer-padding-y: 2rem;
+  --nav-gap: 1.5rem;
+  --section-padding: 1.5rem;
+  --section-gap: 1.5rem;
+  --hero-max-width: 40rem;
+  --button-padding-x: 1.5rem;
+  --button-padding-y: 0.75rem;
+  --card-gap: 0.75rem;
+  --modal-padding: 1.5rem;
+  --radius-card: 4px;
+  --radius-button: 4px;
+  --radius-input: 4px;
+  --radius-badge: 4px;
+  --radius-nav: 4px;
 }
 
 @keyframes fade-in {
@@ -316,7 +397,10 @@ h3 {
 ::-webkit-scrollbar-thumb { background: var(--color-border); }
 ::-webkit-scrollbar-thumb:hover { background: var(--color-text-tertiary); }
 
-/* Zero border-radius globally — editorial sharp geometry */
-*, *::before, *::after {
+/* Theme-driven border-radius */
+[data-theme="editorial"] *, [data-theme="editorial"] *::before, [data-theme="editorial"] *::after {
   border-radius: 0 !important;
+}
+[data-theme="forest"] *, [data-theme="forest"] *::before, [data-theme="forest"] *::after {
+  border-radius: var(--radius-card) !important;
 }

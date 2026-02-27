@@ -15,7 +15,7 @@ export function PageContainer({
       : "max-w-[var(--width-content)]";
 
   return (
-    <div className={`mx-auto px-16 py-10 ${widthClass} ${className}`}>
+    <div className={`mx-auto px-[var(--page-padding-x)] py-[var(--page-padding-y)] ${widthClass} ${className}`}>
       {children}
     </div>
   );

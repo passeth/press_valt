@@ -367,7 +367,7 @@ export default function WritePage({ params }: WritePageProps) {
                 소재 분석 결과
               </h2>
               {analysis ? (
-                <div className="border border-border p-6 bg-surface">
+                <div className="border border-border p-[var(--section-padding)] rounded-[var(--radius-card)] bg-surface">
                   <div className="prose whitespace-pre-wrap text-[length:var(--text-small)] leading-relaxed">
                     {analysis}
                   </div>
@@ -396,7 +396,7 @@ export default function WritePage({ params }: WritePageProps) {
                 글 구조 제안
               </h2>
               {suggestion ? (
-                <div className="border border-border p-6 bg-surface">
+                <div className="border border-border p-[var(--section-padding)] rounded-[var(--radius-card)] bg-surface">
                   <div className="prose whitespace-pre-wrap text-[length:var(--text-small)] leading-relaxed">
                     {suggestion}
                   </div>
@@ -488,7 +488,7 @@ export default function WritePage({ params }: WritePageProps) {
                 <h3 className="text-[length:var(--text-h3)] font-medium mb-3">
                   미리보기
                 </h3>
-                <div className="border border-border p-6 bg-surface">
+                <div className="border border-border p-[var(--section-padding)] rounded-[var(--radius-card)] bg-surface">
                   <div className="prose whitespace-pre-wrap text-[length:var(--text-small)] leading-relaxed max-h-[300px] overflow-y-auto">
                     {draft || "초안이 없습니다."}
                   </div>

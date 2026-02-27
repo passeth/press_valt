@@ -14,7 +14,7 @@ featured: false
 reading_time: 10 min
 video_url: https://www.youtube.com/embed/fOY0_WCR3eY
 video_channel: David Ondrej
-featured_image: /assets/images/112.jpg
+featured_image: /assets/images/112.png
 topics_kr: Remotion과 Claude Code 통합, AI 기반 비디오 생성, 코드로 영상 프로그래밍, 프롬프트 엔지니어링, 콘텐츠 제작 자동화
 ---
 ## Video

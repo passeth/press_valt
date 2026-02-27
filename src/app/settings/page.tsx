@@ -126,7 +126,7 @@ export default function SettingsPage() {
 
         <div className="space-y-8">
           {/* Theme section */}
-          <section className="border border-border p-6">
+          <section className="border border-border p-[var(--section-padding)] rounded-[var(--radius-card)]">
             <h2 className="text-[length:var(--text-h3)] font-medium mb-4">
               테마
             </h2>
@@ -161,7 +161,7 @@ export default function SettingsPage() {
           </section>
 
           {/* Profile section */}
-          <section className="border border-border p-6">
+          <section className="border border-border p-[var(--section-padding)] rounded-[var(--radius-card)]">
             <h2 className="text-[length:var(--text-h3)] font-medium mb-6">
               프로필
             </h2>
@@ -175,7 +175,7 @@ export default function SettingsPage() {
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   placeholder="표시될 이름"
-                  className="w-full px-4 py-2 border border-border bg-background text-text-primary text-[length:var(--text-body)] placeholder:text-placeholder focus:outline-none focus:border-accent transition-colors"
+                  className="w-full px-4 py-2 border border-border bg-background text-text-primary rounded-[var(--radius-input)] text-[length:var(--text-body)] placeholder:text-placeholder focus:outline-none focus:border-accent transition-colors"
                 />
               </div>
               <div>
@@ -187,14 +187,14 @@ export default function SettingsPage() {
                   onChange={(e) => setBio(e.target.value)}
                   placeholder="간단한 자기소개"
                   rows={3}
-                  className="w-full px-4 py-2 border border-border bg-background text-text-primary text-[length:var(--text-body)] placeholder:text-placeholder focus:outline-none focus:border-accent transition-colors resize-none"
+                  className="w-full px-4 py-2 border border-border bg-background text-text-primary rounded-[var(--radius-input)] text-[length:var(--text-body)] placeholder:text-placeholder focus:outline-none focus:border-accent transition-colors resize-none"
                 />
               </div>
             </div>
           </section>
 
           {/* Press visibility */}
-          <section className="border border-border p-6">
+          <section className="border border-border p-[var(--section-padding)] rounded-[var(--radius-card)]">
             <h2 className="text-[length:var(--text-h3)] font-medium mb-4">
               프레스 공개 설정
             </h2>
@@ -215,7 +215,7 @@ export default function SettingsPage() {
           </section>
 
           {/* AI provider */}
-          <section className="border border-border p-6">
+          <section className="border border-border p-[var(--section-padding)] rounded-[var(--radius-card)]">
             <h2 className="text-[length:var(--text-h3)] font-medium mb-4">
               AI 제공자
             </h2>

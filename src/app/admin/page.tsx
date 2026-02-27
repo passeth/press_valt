@@ -11,11 +11,11 @@ export default function AdminDashboard() {
       <h1 className="text-2xl font-bold tracking-tight mb-8">대시보드</h1>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-[var(--section-gap)]">
         {stats.map((stat) => (
           <div
             key={stat.label}
-            className="border border-border rounded-sm p-6 bg-white"
+            className="border border-border rounded-sm p-[var(--section-padding)] bg-white"
           >
             <p className="text-sm text-text-secondary mb-2">{stat.label}</p>
             <p className="text-3xl font-bold tracking-tight">{stat.value}</p>

@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
 
 export const maxDuration = 60;
@@ -97,18 +97,20 @@ export async function POST(request: NextRequest) {
       bytes[i] = binaryString.charCodeAt(i);
     }
 
-    const { error: uploadError } = await supabase.storage
+    // Use service-role client to bypass RLS for storage upload
+    const serviceClient = createServiceClient();
+
+    const { error: uploadError } = await serviceClient.storage
       .from("post-images")
       .upload(fileName, bytes, {
         contentType: mimeType,
         upsert: false,
       });
-
     if (uploadError) {
       return NextResponse.json({ error: `Upload failed: ${uploadError.message}` }, { status: 500 });
     }
 
-    const { data: urlData } = supabase.storage.from("post-images").getPublicUrl(fileName);
+    const { data: urlData } = serviceClient.storage.from("post-images").getPublicUrl(fileName);
 
     return NextResponse.json({ imageUrl: urlData.publicUrl });
   } catch (error) {

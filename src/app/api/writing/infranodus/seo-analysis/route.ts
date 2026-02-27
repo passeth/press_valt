@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
+import { extractGraphData } from "@/lib/infranodus";
 
 export const maxDuration = 30;
 
@@ -60,9 +61,11 @@ export async function POST(request: NextRequest) {
 
     const data = await res.json();
     const seoInsights = data.aiAdvice?.[0]?.text ?? "SEO 분석 결과를 가져올 수 없습니다.";
+    const graph = extractGraphData(data as Record<string, unknown>);
 
     return NextResponse.json({
       seoInsights,
+      graph,
       usage: data.usage,
     });
   } catch (error) {

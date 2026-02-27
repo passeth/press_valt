@@ -2,12 +2,16 @@
 
 import { useEffect, useState, use, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { TopNav } from "@/components/layout/TopNav";
 import { Footer } from "@/components/layout/Footer";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Textarea";
 import { Skeleton } from "@/components/ui/Skeleton";
+import type { GraphData } from "@/types/graph";
+
+const KnowledgeGraph = dynamic(() => import("@/components/writing/KnowledgeGraph"), { ssr: false });
 
 /* ── Types ── */
 interface WritingSession {
@@ -160,6 +164,7 @@ export default function WritePage({ params }: WritePageProps) {
   const [infraCritical, setInfraCritical] = useState("");
   const [infraSeo, setInfraSeo] = useState("");
   const [seoKeyword, setSeoKeyword] = useState("");
+  const [infraGraphs, setInfraGraphs] = useState<Record<string, GraphData>>({});
 
   const [imageStyle, setImageStyle] = useState("");
   const [imagePrompts, setImagePrompts] = useState<string[]>([]);
@@ -279,6 +284,9 @@ export default function WritePage({ params }: WritePageProps) {
 
       const data = await res.json();
       setInfraCognitive(data);
+      if (data.graph) {
+        setInfraGraphs(prev => ({ ...prev, cognitive: data.graph }));
+      }
       setCurrentStep("infra_cognitive");
     } catch (err) {
       setAiError(err instanceof Error ? err.message : "인지 다양성 분석 중 오류가 발생했습니다.");
@@ -307,6 +315,9 @@ export default function WritePage({ params }: WritePageProps) {
 
       const data = await res.json();
       setInfraWriting(data.advice);
+      if (data.graph) {
+        setInfraGraphs(prev => ({ ...prev, writing: data.graph }));
+      }
       setCurrentStep("infra_writing");
     } catch (err) {
       setAiError(err instanceof Error ? err.message : "글쓰기 어시스턴트 분석 중 오류가 발생했습니다.");
@@ -335,6 +346,9 @@ export default function WritePage({ params }: WritePageProps) {
 
       const data = await res.json();
       setInfraCritical(data.questions);
+      if (data.graph) {
+        setInfraGraphs(prev => ({ ...prev, critical: data.graph }));
+      }
       setCurrentStep("infra_critical");
     } catch (err) {
       setAiError(err instanceof Error ? err.message : "비판적 관점 분석 중 오류가 발생했습니다.");
@@ -367,6 +381,9 @@ export default function WritePage({ params }: WritePageProps) {
 
       const data = await res.json();
       setInfraSeo(data.seoInsights);
+      if (data.graph) {
+        setInfraGraphs(prev => ({ ...prev, seo: data.graph }));
+      }
       setCurrentStep("infra_seo");
     } catch (err) {
       setAiError(err instanceof Error ? err.message : "SEO 분석 중 오류가 발생했습니다.");
@@ -803,6 +820,16 @@ export default function WritePage({ params }: WritePageProps) {
               ) : (
                 <p className="text-text-secondary">인지 다양성 분석 결과가 여기에 표시됩니다.</p>
               )}
+              {infraGraphs.cognitive && (
+                <div className="border border-border overflow-hidden">
+                  <div className="px-4 py-2 border-b border-border bg-surface">
+                    <p className="text-[length:var(--text-caption)] text-text-secondary font-medium tracking-wide uppercase">
+                      Knowledge Graph
+                    </p>
+                  </div>
+                  <KnowledgeGraph graphData={infraGraphs.cognitive} />
+                </div>
+              )}
               <div className="flex items-center gap-3 pt-4">
                 <Button
                   variant="secondary"
@@ -841,6 +868,16 @@ export default function WritePage({ params }: WritePageProps) {
               ) : (
                 <p className="text-text-secondary">글쓰기 어시스턴트 결과가 여기에 표시됩니다.</p>
               )}
+              {infraGraphs.writing && (
+                <div className="border border-border overflow-hidden">
+                  <div className="px-4 py-2 border-b border-border bg-surface">
+                    <p className="text-[length:var(--text-caption)] text-text-secondary font-medium tracking-wide uppercase">
+                      Knowledge Graph
+                    </p>
+                  </div>
+                  <KnowledgeGraph graphData={infraGraphs.writing} />
+                </div>
+              )}
               <div className="flex items-center gap-3 pt-4">
                 <Button
                   variant="secondary"
@@ -878,6 +915,16 @@ export default function WritePage({ params }: WritePageProps) {
                 </div>
               ) : (
                 <p className="text-text-secondary">비판적 관점 분석 결과가 여기에 표시됩니다.</p>
+              )}
+              {infraGraphs.critical && (
+                <div className="border border-border overflow-hidden">
+                  <div className="px-4 py-2 border-b border-border bg-surface">
+                    <p className="text-[length:var(--text-caption)] text-text-secondary font-medium tracking-wide uppercase">
+                      Knowledge Graph
+                    </p>
+                  </div>
+                  <KnowledgeGraph graphData={infraGraphs.critical} />
+                </div>
               )}
               <div className="flex items-center gap-3 pt-4">
                 <Button
@@ -932,6 +979,16 @@ export default function WritePage({ params }: WritePageProps) {
                   <Skeleton className="h-4 w-full" />
                 </div>
               ) : null}
+              {infraGraphs.seo && (
+                <div className="border border-border overflow-hidden">
+                  <div className="px-4 py-2 border-b border-border bg-surface">
+                    <p className="text-[length:var(--text-caption)] text-text-secondary font-medium tracking-wide uppercase">
+                      Knowledge Graph
+                    </p>
+                  </div>
+                  <KnowledgeGraph graphData={infraGraphs.seo} />
+                </div>
+              )}
               <div className="flex items-center gap-3 pt-4">
                 <Button
                   variant="secondary"

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { NextRequest, NextResponse } from "next/server";
+import { extractGraphData } from "@/lib/infranodus";
 
 export const maxDuration = 30;
 
@@ -56,6 +57,7 @@ export async function POST(request: NextRequest) {
     }
 
     const data = await res.json();
+    const graph = extractGraphData(data as Record<string, unknown>);
 
 
     const diversityStats = data.graphSummary?.diversity_stats;
@@ -109,6 +111,7 @@ export async function POST(request: NextRequest) {
       topConcepts: topConcepts.slice(0, 10),
       gapConcepts: gapConcepts.slice(0, 5),
       stats: diversityStats,
+      graph,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unexpected server error";

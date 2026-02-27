@@ -1,209 +1,157 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { TopNav } from "@/components/layout/TopNav";
 import { Footer } from "@/components/layout/Footer";
 import { PageContainer } from "@/components/layout/PageContainer";
-import { Button } from "@/components/ui/Button";
 import { Tabs } from "@/components/ui/Tabs";
 import { Skeleton } from "@/components/ui/Skeleton";
 
-interface Collection {
+interface EnrichedScrap {
   id: string;
-  title: string;
-  description: string | null;
-  status: "active" | "archived";
+  user_id: string;
+  source_revision_id: string;
+  source_block_id: string;
+  start_offset: number;
+  end_offset: number;
+  exact_quote: string;
+  prefix: string | null;
+  suffix: string | null;
+  user_note: string | null;
+  selector: { type: string; exact: string; prefix?: string; suffix?: string };
   created_at: string;
-  updated_at: string;
+  article_title: string | null;
+  article_slug: string | null;
+  article_thumbnail_url: string | null;
+  article_category: string | null;
 }
 
-interface CollectionDetailResponse {
-  items?: Array<{ id: string }>;
-}
+type ViewTab = "date" | "note";
+type SortOrder = "newest" | "oldest";
 
-type FilterTab = "active" | "archived";
-
-const FILTER_TABS: Array<{ id: FilterTab; label: string }> = [
-  { id: "active", label: "활성" },
-  { id: "archived", label: "보관됨" },
+const VIEW_TABS: Array<{ id: ViewTab; label: string }> = [
+  { id: "date", label: "날짜별" },
+  { id: "note", label: "노트별" },
 ];
 
+const WEEKDAYS = ["일요일", "월요일", "화요일", "수요일", "목요일", "금요일", "토요일"];
+
+function formatDateHeader(dateStr: string): string {
+  const d = new Date(dateStr);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const weekday = WEEKDAYS[d.getDay()];
+  return `${year}. ${month}. ${day}. ${weekday}`;
+}
+
+function formatTimestamp(dateStr: string): string {
+  const d = new Date(dateStr);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const hours = String(d.getHours()).padStart(2, "0");
+  const minutes = String(d.getMinutes()).padStart(2, "0");
+  return `${year}.${month}.${day} ${hours}:${minutes}`;
+}
+
 export default function CollectionsPage() {
-  const [collections, setCollections] = useState<Collection[]>([]);
-  const [scrapCounts, setScrapCounts] = useState<Record<string, number>>({});
+  const [scraps, setScraps] = useState<EnrichedScrap[]>([]);
   const [loading, setLoading] = useState(true);
   const [authRequired, setAuthRequired] = useState(false);
   const [error, setError] = useState("");
-  const [activeTab, setActiveTab] = useState<FilterTab>("active");
-  const [newTitle, setNewTitle] = useState("");
-  const [newDescription, setNewDescription] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [updatingCollectionId, setUpdatingCollectionId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<ViewTab>("date");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("newest");
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
-    void fetchCollections();
+    const fetchScraps = async () => {
+      setLoading(true);
+      setError("");
+
+      try {
+        const res = await fetch("/api/scraps/enriched");
+
+        if (!res.ok) {
+          if (res.status === 401) {
+            setAuthRequired(true);
+            return;
+          }
+          const data = (await res.json().catch(() => ({}))) as { error?: string };
+          setError(data.error ?? "스크랩을 불러오지 못했습니다.");
+          return;
+        }
+
+        setAuthRequired(false);
+        const data = (await res.json()) as { scraps?: EnrichedScrap[] };
+        setScraps(data.scraps ?? []);
+      } catch {
+        setError("스크랩을 불러오는 중 문제가 발생했습니다.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void fetchScraps();
   }, []);
 
-  const fetchCollections = async () => {
-    setLoading(true);
-    setError("");
+  const grouped = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
 
-    try {
-      const res = await fetch("/api/collections");
-      if (!res.ok) {
-        if (res.status === 401) {
-          setAuthRequired(true);
-          return;
-        }
-
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
-        setError(data.error ?? "컬렉션을 불러오지 못했습니다.");
-        return;
-      }
-
-      setAuthRequired(false);
-      const data = (await res.json()) as { collections?: Collection[] };
-      const fetchedCollections = data.collections ?? [];
-      setCollections(fetchedCollections);
-
-      if (fetchedCollections.length === 0) {
-        setScrapCounts({});
-        return;
-      }
-
-      const detailResponses = await Promise.all(
-        fetchedCollections.map(async (collection) => {
-          const detailRes = await fetch(`/api/collections/${collection.id}`);
-          if (!detailRes.ok) {
-            return { collectionId: collection.id, count: 0 };
-          }
-
-          const detailData = (await detailRes.json()) as CollectionDetailResponse;
-          return {
-            collectionId: collection.id,
-            count: detailData.items?.length ?? 0,
-          };
-        })
+    let filtered = scraps;
+    if (query) {
+      filtered = scraps.filter(
+        (s) =>
+          s.exact_quote.toLowerCase().includes(query) ||
+          (s.user_note && s.user_note.toLowerCase().includes(query)) ||
+          (s.article_title && s.article_title.toLowerCase().includes(query))
       );
-
-      const nextCounts: Record<string, number> = {};
-      detailResponses.forEach(({ collectionId, count }) => {
-        nextCounts[collectionId] = count;
-      });
-      setScrapCounts(nextCounts);
-    } catch {
-      setError("컬렉션을 불러오는 중 문제가 발생했습니다.");
-    } finally {
-      setLoading(false);
     }
-  };
 
-  const handleCreate = async () => {
-    if (!newTitle.trim()) return;
-
-    setError("");
-    setCreating(true);
-
-    try {
-      const res = await fetch("/api/collections", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: newTitle.trim(),
-          description: newDescription.trim() || null,
-        }),
-      });
-
-      if (!res.ok) {
-        if (res.status === 401) {
-          setAuthRequired(true);
-          return;
-        }
-
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
-        setError(data.error ?? "컬렉션 생성에 실패했습니다.");
-        return;
-      }
-
-      const data = (await res.json()) as { collection: Collection };
-      setCollections((prev) => [data.collection, ...prev]);
-      setScrapCounts((prev) => ({ ...prev, [data.collection.id]: 0 }));
-      setNewTitle("");
-      setNewDescription("");
-    } catch {
-      setError("컬렉션 생성 중 문제가 발생했습니다.");
-    } finally {
-      setCreating(false);
-    }
-  };
-
-  const handleArchive = async (collectionId: string, status: "active" | "archived") => {
-    setError("");
-    setUpdatingCollectionId(collectionId);
-
-    try {
-      const res = await fetch(`/api/collections/${collectionId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
-      });
-
-      if (!res.ok) {
-        if (res.status === 401) {
-          setAuthRequired(true);
-          return;
-        }
-
-        const data = (await res.json().catch(() => ({}))) as { error?: string };
-        setError(data.error ?? "컬렉션 상태를 변경하지 못했습니다.");
-        return;
-      }
-
-      const data = (await res.json()) as { collection: Collection };
-      setCollections((prev) =>
-        prev.map((collection) =>
-          collection.id === collectionId ? data.collection : collection
-        )
-      );
-    } catch {
-      setError("컬렉션 상태 변경 중 문제가 발생했습니다.");
-    } finally {
-      setUpdatingCollectionId(null);
-    }
-  };
-
-  const filteredCollections = collections.filter(
-    (collection) => collection.status === activeTab
-  );
-
-  const formatDate = (value: string) =>
-    new Date(value).toLocaleDateString("ko-KR", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
+    const sorted = [...filtered].sort((a, b) => {
+      const diff = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+      return sortOrder === "newest" ? -diff : diff;
     });
+
+    const groups = new Map<string, EnrichedScrap[]>();
+
+    if (activeTab === "date") {
+      for (const scrap of sorted) {
+        const label = formatDateHeader(scrap.created_at);
+        if (!groups.has(label)) {
+          groups.set(label, []);
+        }
+        groups.get(label)!.push(scrap);
+      }
+    } else {
+      for (const scrap of sorted) {
+        const label = scrap.article_title ?? "출처 미상";
+        if (!groups.has(label)) {
+          groups.set(label, []);
+        }
+        groups.get(label)!.push(scrap);
+      }
+    }
+
+    return groups;
+  }, [scraps, searchQuery, sortOrder, activeTab]);
 
   return (
     <div className="min-h-screen flex flex-col">
       <TopNav />
 
       <PageContainer>
-        <div className="flex items-end justify-between mb-10">
-          <div>
-            <h1 className="text-[length:var(--text-h1)] font-serif font-semibold italic mb-2">
-              컬렉션
-            </h1>
-            <p className="text-[length:var(--text-small)] text-text-secondary">
-              스크랩한 소재를 주제별로 모아 관리하세요.
-            </p>
-          </div>
+        <div className="mb-8">
+          <h1 className="text-[length:var(--text-h1)] font-serif font-semibold italic">
+            문장스크랩
+          </h1>
         </div>
 
         {authRequired ? (
           <div className="border border-border bg-surface p-8 text-center">
             <p className="text-[length:var(--text-body)] text-text-primary mb-2">
-              컬렉션을 보려면 로그인이 필요합니다.
+              스크랩을 보려면 로그인이 필요합니다.
             </p>
             <Link
               href="/login?redirectTo=/collections"
@@ -214,125 +162,64 @@ export default function CollectionsPage() {
           </div>
         ) : (
           <>
-            <div className="border border-border bg-surface p-4 mb-8">
-              <p className="text-[length:var(--text-small)] text-text-secondary mb-3">
-                새 컬렉션 만들기
-              </p>
-              <div className="grid grid-cols-1 gap-3">
+            <Tabs
+              tabs={VIEW_TABS}
+              activeTab={activeTab}
+              onChange={(id) => setActiveTab(id as ViewTab)}
+            />
+
+            <div className="flex items-center justify-between gap-4 mt-6 mb-8">
+              <select
+                value={sortOrder}
+                onChange={(e) => setSortOrder(e.target.value as SortOrder)}
+                className="border border-border bg-background px-3 py-2 text-[length:var(--text-body)] text-text-primary focus:outline-none focus:border-accent transition-colors"
+              >
+                <option value="newest">최신순</option>
+                <option value="oldest">오래된순</option>
+              </select>
+
+              <div className="relative flex-1 max-w-sm">
+                <svg
+                  className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-tertiary"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <circle cx="11" cy="11" r="8" strokeWidth="2" />
+                  <path d="m21 21-4.3-4.3" strokeWidth="2" strokeLinecap="round" />
+                </svg>
                 <input
                   type="text"
-                  value={newTitle}
-                  onChange={(event) => setNewTitle(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") {
-                      void handleCreate();
-                    }
-                  }}
-                  placeholder="컬렉션 제목"
-                  className="w-full border border-border bg-background px-4 py-2 text-[length:var(--text-body)] text-text-primary placeholder:text-placeholder focus:outline-none focus:border-accent transition-colors"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="스크랩, 노트, 메모를 검색하세요."
+                  className="w-full border border-border bg-background pl-10 pr-4 py-2 text-[length:var(--text-body)] text-text-primary placeholder:text-placeholder focus:outline-none focus:border-accent transition-colors"
                 />
-                <textarea
-                  value={newDescription}
-                  onChange={(event) => setNewDescription(event.target.value)}
-                  placeholder="설명 (선택)"
-                  rows={3}
-                  className="w-full resize-none border border-border bg-background px-4 py-2 text-[length:var(--text-body)] text-text-primary placeholder:text-placeholder focus:outline-none focus:border-accent transition-colors"
-                />
-                <div className="flex justify-end">
-                  <Button
-                    size="sm"
-                    onClick={() => void handleCreate()}
-                    isLoading={creating}
-                    disabled={!newTitle.trim()}
-                  >
-                    컬렉션 생성
-                  </Button>
-                </div>
               </div>
             </div>
 
-            <Tabs
-              tabs={FILTER_TABS}
-              activeTab={activeTab}
-              onChange={(nextTabId) => setActiveTab(nextTabId as FilterTab)}
-            />
-
             {error && (
-              <div className="mt-4 border border-border bg-surface p-4">
+              <div className="mb-6 border border-border bg-surface p-4">
                 <p className="text-[length:var(--text-small)] text-text-secondary">{error}</p>
               </div>
             )}
 
             {loading ? (
-              <div className="space-y-4 mt-6">
-                {Array.from({ length: 4 }).map((_, index) => (
-                  <Skeleton key={index} className="h-28 w-full" />
-                ))}
+              <div className="space-y-8">
+                <Skeleton className="h-8 w-64 mb-4" />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {Array.from({ length: 4 }).map((_, i) => (
+                    <Skeleton key={i} className="h-52 w-full" />
+                  ))}
+                </div>
               </div>
-            ) : filteredCollections.length > 0 ? (
-              <div className="space-y-4 mt-6">
-                {filteredCollections.map((collection) => {
-                  const isArchived = collection.status === "archived";
-                  const isUpdating = updatingCollectionId === collection.id;
-
-                  return (
-                    <div
-                      key={collection.id}
-                      className="border border-border bg-background p-5 transition-colors hover:bg-surface"
-                    >
-                      <div className="flex flex-wrap items-start justify-between gap-4">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2 mb-2">
-                            <Link
-                              href={`/collections/${collection.id}`}
-                              className="text-[length:var(--text-h3)] font-semibold text-text-primary hover:text-accent transition-colors"
-                            >
-                              {collection.title}
-                            </Link>
-                            <span className="border border-border bg-surface px-2 py-1 text-[length:var(--text-caption)] text-text-secondary">
-                              스크랩 {scrapCounts[collection.id] ?? 0}개
-                            </span>
-                          </div>
-
-                          <p className="text-[length:var(--text-small)] text-text-secondary mb-3">
-                            {collection.description?.trim() || "설명이 아직 없습니다."}
-                          </p>
-
-                          <p className="text-[length:var(--text-caption)] text-text-tertiary">
-                            최근 수정: {formatDate(collection.updated_at)}
-                          </p>
-                        </div>
-
-                        <div className="flex items-center gap-2 shrink-0">
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() =>
-                              void handleArchive(
-                                collection.id,
-                                isArchived ? "active" : "archived"
-                              )
-                            }
-                            isLoading={isUpdating}
-                            disabled={isUpdating}
-                          >
-                            {isArchived ? "활성으로 복원" : "보관"}
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="mt-6 border border-border bg-surface py-16 text-center">
+            ) : scraps.length === 0 ? (
+              <div className="border border-border bg-surface py-16 text-center">
                 <p className="text-[length:var(--text-body)] text-text-primary mb-2">
-                  {activeTab === "active"
-                    ? "아직 활성 컬렉션이 없습니다."
-                    : "보관된 컬렉션이 없습니다."}
+                  아직 스크랩이 없습니다.
                 </p>
                 <p className="text-[length:var(--text-small)] text-text-secondary mb-4">
-                  먼저 아티클을 읽고 스크랩을 모아 컬렉션을 만들어보세요.
+                  아티클에서 텍스트를 드래그하여 스크랩해보세요.
                 </p>
                 <Link
                   href="/articles"
@@ -340,6 +227,91 @@ export default function CollectionsPage() {
                 >
                   아티클 둘러보기
                 </Link>
+              </div>
+            ) : grouped.size === 0 ? (
+              <div className="border border-border bg-surface py-16 text-center">
+                <p className="text-[length:var(--text-body)] text-text-primary mb-2">
+                  검색 결과가 없습니다.
+                </p>
+                <p className="text-[length:var(--text-small)] text-text-secondary">
+                  다른 키워드로 검색해보세요.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-10">
+                {Array.from(grouped.entries()).map(([label, groupScraps]) => (
+                  <section key={label}>
+                    <h2 className="text-[length:var(--text-h2)] font-serif font-semibold italic mb-6">
+                      {label}
+                    </h2>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {groupScraps.map((scrap) => (
+                        <div
+                          key={scrap.id}
+                          className="border border-border bg-background p-5 flex flex-col transition-colors hover:bg-surface"
+                        >
+                          <p className="text-[length:var(--text-small)] text-text-primary leading-relaxed line-clamp-6">
+                            {scrap.exact_quote}
+                          </p>
+
+                          {scrap.user_note && (
+                            <p className="text-[length:var(--text-caption)] text-text-secondary italic mt-2">
+                              {scrap.user_note}
+                            </p>
+                          )}
+
+                          <p className="text-[length:var(--text-caption)] text-text-tertiary mt-3">
+                            {formatTimestamp(scrap.created_at)}
+                          </p>
+
+                          {(scrap.article_title || scrap.article_thumbnail_url) && (
+                            <div className="mt-auto pt-3 border-t border-border-light">
+                              {scrap.article_slug ? (
+                                <Link
+                                  href={`/articles/${scrap.article_slug}`}
+                                  className="flex items-center gap-3 group/link"
+                                >
+                                  <div className="w-10 h-10 bg-surface shrink-0 overflow-hidden">
+                                    {scrap.article_thumbnail_url ? (
+                                      <img
+                                        src={scrap.article_thumbnail_url}
+                                        alt=""
+                                        className="w-full h-full object-cover"
+                                      />
+                                    ) : (
+                                      <div className="w-full h-full" />
+                                    )}
+                                  </div>
+                                  <span className="text-[length:var(--text-caption)] text-text-primary line-clamp-2 group-hover/link:text-accent-hover transition-colors">
+                                    {scrap.article_title}
+                                  </span>
+                                </Link>
+                              ) : (
+                                <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 bg-surface shrink-0 overflow-hidden">
+                                    {scrap.article_thumbnail_url ? (
+                                      <img
+                                        src={scrap.article_thumbnail_url}
+                                        alt=""
+                                        className="w-full h-full object-cover"
+                                      />
+                                    ) : (
+                                      <div className="w-full h-full" />
+                                    )}
+                                  </div>
+                                  <span className="text-[length:var(--text-caption)] text-text-primary line-clamp-2">
+                                    {scrap.article_title ?? "출처 미상"}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                ))}
               </div>
             )}
           </>

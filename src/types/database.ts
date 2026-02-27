@@ -396,6 +396,7 @@ export type Database = {
           rendered_html: string | null;
           status: "draft" | "published" | "unlisted";
           published_at: string | null;
+          thumbnail_url: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -408,6 +409,7 @@ export type Database = {
           rendered_html?: string | null;
           status?: "draft" | "published" | "unlisted";
           published_at?: string | null;
+          thumbnail_url?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -420,6 +422,7 @@ export type Database = {
           rendered_html?: string | null;
           status?: "draft" | "published" | "unlisted";
           published_at?: string | null;
+          thumbnail_url?: string | null;
           created_at?: string;
           updated_at?: string;
         };

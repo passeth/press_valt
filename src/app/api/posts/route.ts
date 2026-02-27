@@ -10,6 +10,7 @@ type CreatePostBody = {
   rendered_html?: string | null;
   status?: Database["public"]["Tables"]["user_posts"]["Row"]["status"];
   published_at?: string | null;
+  thumbnail_url?: string;
   sources?: Array<{
     scrap_id: string;
     usage: Database["public"]["Tables"]["post_sources"]["Row"]["usage"];
@@ -119,6 +120,7 @@ export async function POST(request: NextRequest) {
         rendered_html: body.rendered_html ?? null,
         status: body.status ?? "draft",
         published_at: body.published_at ?? null,
+        thumbnail_url: body.thumbnail_url ?? null,
       })
       .select("*")
       .single();

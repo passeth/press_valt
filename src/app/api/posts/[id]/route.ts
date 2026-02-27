@@ -12,6 +12,7 @@ type UpdatePostBody = {
   rendered_html?: string | null;
   status?: "draft" | "published" | "unlisted";
   published_at?: string | null;
+  thumbnail_url?: string | null;
 };
 
 export async function GET(_request: NextRequest, context: RouteContext) {
@@ -100,6 +101,10 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     if (body.published_at !== undefined) {
       updates.published_at = body.published_at;
+    }
+
+    if (body.thumbnail_url !== undefined) {
+      updates.thumbnail_url = body.thumbnail_url;
     }
 
     if (Object.keys(updates).length === 0) {

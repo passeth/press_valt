@@ -1,13 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useState, use } from "react";
+import { useCallback, useEffect, useMemo, useState, use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { TopNav } from "@/components/layout/TopNav";
 import { Footer } from "@/components/layout/Footer";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { Button } from "@/components/ui/Button";
+import { Tabs } from "@/components/ui/Tabs";
 import { Skeleton } from "@/components/ui/Skeleton";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 interface Scrap {
   id: string;
@@ -16,6 +21,9 @@ interface Scrap {
   source_revision_id: string;
   source_block_id: string;
   created_at: string;
+  article_title: string | null;
+  article_slug: string | null;
+  article_thumbnail_url: string | null;
 }
 
 interface CollectionItem {
@@ -58,9 +66,211 @@ interface CollectionDetailPageProps {
   params: Promise<{ id: string }>;
 }
 
+// ---------------------------------------------------------------------------
+// Tabs & sort config
+// ---------------------------------------------------------------------------
+
+type ViewTab = "by-date" | "by-note";
+type SortOrder = "newest" | "oldest";
+
+const VIEW_TABS: Array<{ id: ViewTab; label: string }> = [
+  { id: "by-date", label: "날짜별" },
+  { id: "by-note", label: "노트별" },
+];
+
+const SORT_OPTIONS: Array<{ id: SortOrder; label: string }> = [
+  { id: "newest", label: "최신순" },
+  { id: "oldest", label: "오래된순" },
+];
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function formatDateShort(value: string) {
+  return new Date(value).toLocaleDateString("ko-KR", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+}
+
+function formatDateGroupKey(value: string) {
+  const d = new Date(value);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const weekday = d.toLocaleDateString("ko-KR", { weekday: "long" });
+  return `${year}. ${month}. ${day}. ${weekday}`;
+}
+
+function formatTimestamp(value: string) {
+  const d = new Date(value);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const hours = String(d.getHours()).padStart(2, "0");
+  const minutes = String(d.getMinutes()).padStart(2, "0");
+  return `${year}.${month}.${day} ${hours}:${minutes}`;
+}
+
+function dateOnlyKey(value: string) {
+  const d = new Date(value);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// ---------------------------------------------------------------------------
+// Scrap Card (local component)
+// ---------------------------------------------------------------------------
+
+function ScrapCard({
+  item,
+  onRemove,
+  isRemoving,
+}: {
+  item: CollectionItem;
+  onRemove: (id: string) => void;
+  isRemoving: boolean;
+}) {
+  const scrap = item.scrap;
+
+  return (
+    <div className="border border-border bg-background p-5 flex flex-col justify-between transition-colors hover:bg-surface group">
+
+      <div className="flex-1 mb-4">
+        {scrap ? (
+          <p className="text-[length:var(--text-body)] text-text-primary leading-relaxed">
+            {scrap.exact_quote}
+          </p>
+        ) : (
+          <p className="text-[length:var(--text-small)] text-text-tertiary">
+            스크랩 데이터를 불러올 수 없습니다.
+          </p>
+        )}
+
+
+        {scrap?.user_note && (
+          <p className="mt-3 text-[length:var(--text-caption)] text-text-secondary border-l-2 border-border pl-3">
+            {scrap.user_note}
+          </p>
+        )}
+
+
+        {item.note && (
+          <p className="mt-2 text-[length:var(--text-caption)] text-text-secondary border-l-2 border-border pl-3">
+            {item.note}
+          </p>
+        )}
+      </div>
+
+
+      <div>
+
+        {scrap && (
+          <p className="text-[length:var(--text-caption)] text-text-tertiary mb-3">
+            {formatTimestamp(scrap.created_at)}
+          </p>
+        )}
+
+
+        {scrap?.article_slug && (
+          <Link
+            href={`/articles/${scrap.article_slug}`}
+            className="flex items-center gap-3 border-t border-border-light pt-3 transition-colors hover:opacity-80"
+          >
+            {scrap.article_thumbnail_url ? (
+              <img
+                src={scrap.article_thumbnail_url}
+                alt=""
+                className="w-10 h-10 object-cover shrink-0 bg-surface"
+              />
+            ) : (
+              <div className="w-10 h-10 bg-surface shrink-0 flex items-center justify-center">
+                <span className="text-[length:var(--text-badge)] text-text-tertiary">N/A</span>
+              </div>
+            )}
+            <span className="text-[length:var(--text-caption)] text-text-secondary line-clamp-2 min-w-0">
+              {scrap.article_title ?? "원문 아티클"}
+            </span>
+          </Link>
+        )}
+
+
+        {scrap && !scrap.article_slug && (
+          <Link
+            href={`/articles?sourceRevisionId=${encodeURIComponent(scrap.source_revision_id)}`}
+            className="block text-[length:var(--text-caption)] text-accent hover:text-accent-hover transition-colors border-t border-border-light pt-3"
+          >
+            원문 아티클 보기
+          </Link>
+        )}
+
+
+        <div className="mt-2 flex justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onRemove(item.id)}
+            isLoading={isRemoving}
+            disabled={isRemoving}
+          >
+            제거
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Search icon SVG (inline)
+// ---------------------------------------------------------------------------
+
+function SearchIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="text-text-tertiary"
+    >
+      <circle cx="11" cy="11" r="8" />
+      <path d="m21 21-4.3-4.3" />
+    </svg>
+  );
+}
+
+function ChevronDownIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="text-text-secondary"
+    >
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Main page
+// ---------------------------------------------------------------------------
+
 export default function CollectionDetailPage({ params }: CollectionDetailPageProps) {
   const { id } = use(params);
   const router = useRouter();
+
 
   const [collection, setCollection] = useState<Collection | null>(null);
   const [items, setItems] = useState<CollectionItem[]>([]);
@@ -69,6 +279,8 @@ export default function CollectionDetailPage({ params }: CollectionDetailPagePro
   const [authRequired, setAuthRequired] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [actionError, setActionError] = useState("");
+
+
   const [isEditing, setIsEditing] = useState(false);
   const [draftTitle, setDraftTitle] = useState("");
   const [draftDescription, setDraftDescription] = useState("");
@@ -76,6 +288,12 @@ export default function CollectionDetailPage({ params }: CollectionDetailPagePro
   const [removingItemId, setRemovingItemId] = useState<string | null>(null);
   const [startingWriting, setStartingWriting] = useState(false);
   const [writingError, setWritingError] = useState("");
+
+
+  const [activeTab, setActiveTab] = useState<ViewTab>("by-date");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("newest");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortDropdownOpen, setSortDropdownOpen] = useState(false);
 
   const fetchCollection = useCallback(async () => {
     setLoading(true);
@@ -204,17 +422,71 @@ export default function CollectionDetailPage({ params }: CollectionDetailPagePro
     setStartingWriting(false);
   };
 
-  const formatDate = (value: string) =>
-    new Date(value).toLocaleDateString("ko-KR", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
+  // ---------------------------------------------------------------------------
+  // Derived: filtered, sorted, grouped items
+  // ---------------------------------------------------------------------------
+
+  const filteredItems = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    let result = items;
+
+    if (query) {
+      result = result.filter((item) => {
+        const quote = item.scrap?.exact_quote?.toLowerCase() ?? "";
+        const userNote = item.scrap?.user_note?.toLowerCase() ?? "";
+        const itemNote = item.note?.toLowerCase() ?? "";
+        return quote.includes(query) || userNote.includes(query) || itemNote.includes(query);
+      });
+    }
+
+
+    const sorted = [...result].sort((a, b) => {
+      const dateA = new Date(a.scrap?.created_at ?? a.created_at).getTime();
+      const dateB = new Date(b.scrap?.created_at ?? b.created_at).getTime();
+      return sortOrder === "newest" ? dateB - dateA : dateA - dateB;
     });
 
-  const getScrapSourceLink = (scrap: Scrap) => {
-    const revisionId = encodeURIComponent(scrap.source_revision_id);
-    return `/articles?sourceRevisionId=${revisionId}`;
-  };
+    return sorted;
+  }, [items, searchQuery, sortOrder]);
+
+  const dateGroupedItems = useMemo(() => {
+    const groups: Array<{ dateKey: string; dateLabel: string; items: CollectionItem[] }> = [];
+    const groupMap = new Map<string, CollectionItem[]>();
+    const groupOrder: string[] = [];
+
+    for (const item of filteredItems) {
+      const key = dateOnlyKey(item.scrap?.created_at ?? item.created_at);
+      if (!groupMap.has(key)) {
+        groupMap.set(key, []);
+        groupOrder.push(key);
+      }
+      groupMap.get(key)!.push(item);
+    }
+
+    for (const key of groupOrder) {
+      const groupItems = groupMap.get(key)!;
+      const sampleDate = groupItems[0].scrap?.created_at ?? groupItems[0].created_at;
+      groups.push({
+        dateKey: key,
+        dateLabel: formatDateGroupKey(sampleDate),
+        items: groupItems,
+      });
+    }
+
+    return groups;
+  }, [filteredItems]);
+
+
+  useEffect(() => {
+    if (!sortDropdownOpen) return;
+    const handler = () => setSortDropdownOpen(false);
+    document.addEventListener("click", handler);
+    return () => document.removeEventListener("click", handler);
+  }, [sortDropdownOpen]);
+
+  // ---------------------------------------------------------------------------
+  // Render: loading
+  // ---------------------------------------------------------------------------
 
   if (loading) {
     return (
@@ -223,10 +495,10 @@ export default function CollectionDetailPage({ params }: CollectionDetailPagePro
         <PageContainer>
           <Skeleton className="h-8 w-48 mb-4" />
           <Skeleton className="h-5 w-80 mb-8" />
-          <Skeleton className="h-12 w-full mb-6" />
-          <div className="space-y-3">
+          <Skeleton className="h-10 w-full mb-6" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-28 w-full" />
+              <Skeleton key={i} className="h-52 w-full" />
             ))}
           </div>
         </PageContainer>
@@ -234,6 +506,10 @@ export default function CollectionDetailPage({ params }: CollectionDetailPagePro
       </div>
     );
   }
+
+  // ---------------------------------------------------------------------------
+  // Render: error
+  // ---------------------------------------------------------------------------
 
   if (loadError) {
     return (
@@ -254,6 +530,10 @@ export default function CollectionDetailPage({ params }: CollectionDetailPagePro
       </div>
     );
   }
+
+  // ---------------------------------------------------------------------------
+  // Render: auth required
+  // ---------------------------------------------------------------------------
 
   if (authRequired) {
     return (
@@ -277,11 +557,18 @@ export default function CollectionDetailPage({ params }: CollectionDetailPagePro
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // Render: main
+  // ---------------------------------------------------------------------------
+
+  const currentSortLabel = SORT_OPTIONS.find((o) => o.id === sortOrder)?.label ?? "최신순";
+
   return (
     <div className="min-h-screen flex flex-col">
       <TopNav />
 
       <PageContainer>
+
         <Link
           href="/collections"
           className="inline-block text-[length:var(--text-caption)] text-text-tertiary hover:text-text-primary transition-colors mb-6"
@@ -289,11 +576,12 @@ export default function CollectionDetailPage({ params }: CollectionDetailPagePro
           ← 컬렉션 목록
         </Link>
 
-        <div className="border border-border bg-surface p-5 mb-8">
+
+        <div className="mb-8">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0 flex-1">
               {isEditing ? (
-                <div className="space-y-3">
+                <div className="border border-border bg-surface p-5 space-y-3">
                   <input
                     type="text"
                     value={draftTitle}
@@ -333,20 +621,19 @@ export default function CollectionDetailPage({ params }: CollectionDetailPagePro
                 </div>
               ) : (
                 <>
-                  <div className="flex flex-wrap items-center gap-2 mb-2">
-                    <h1 className="text-[length:var(--text-h1)] font-serif font-semibold italic text-text-primary">
-                      {collection?.title}
-                    </h1>
-                    <span className="border border-border bg-background px-2 py-1 text-[length:var(--text-caption)] text-text-secondary">
-                      스크랩 {items.length}개
-                    </span>
+                  <h1 className="text-[length:var(--text-h1)] font-sans font-bold text-text-primary mb-2">
+                    {collection?.title}
+                  </h1>
+                  {collection?.description?.trim() && (
+                    <p className="text-[length:var(--text-small)] text-text-secondary mb-2">
+                      {collection.description}
+                    </p>
+                  )}
+                  <div className="flex flex-wrap items-center gap-3 text-[length:var(--text-caption)] text-text-tertiary">
+                    <span>스크랩 {items.length}개</span>
+                    <span>·</span>
+                    <span>최근 수정: {collection ? formatDateShort(collection.updated_at) : "-"}</span>
                   </div>
-                  <p className="text-[length:var(--text-small)] text-text-secondary mb-2">
-                    {collection?.description?.trim() || "컬렉션 설명이 아직 없습니다."}
-                  </p>
-                  <p className="text-[length:var(--text-caption)] text-text-tertiary">
-                    최근 수정: {collection ? formatDate(collection.updated_at) : "-"}
-                  </p>
                 </>
               )}
             </div>
@@ -376,117 +663,138 @@ export default function CollectionDetailPage({ params }: CollectionDetailPagePro
           )}
         </div>
 
-        {items.length > 0 ? (
-          <div className="space-y-3 mb-10">
-            {items.map((item, index) => (
-              <div
-                key={item.id}
-                className={`border bg-background p-5 transition-colors hover:bg-surface ${
-                  item.highlight_color
-                    ? {
-                        yellow: "border-l-4 border-l-yellow-400 border-t border-r border-b border-border",
-                        green: "border-l-4 border-l-green-400 border-t border-r border-b border-border",
-                        blue: "border-l-4 border-l-blue-400 border-t border-r border-b border-border",
-                        pink: "border-l-4 border-l-pink-400 border-t border-r border-b border-border",
-                        purple: "border-l-4 border-l-purple-400 border-t border-r border-b border-border",
-                      }[item.highlight_color]
-                    : "border border-border"
-                }`}
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-3 mb-2">
-                      <span className="text-[length:var(--text-caption)] text-text-tertiary font-mono">
-                        {String(index + 1).padStart(2, "0")}
-                      </span>
-                    </div>
-                    {item.scrap ? (
-                      <>
-                        <p className="text-[length:var(--text-small)] text-text-primary italic leading-relaxed mb-3">
-                          &ldquo;{item.scrap.exact_quote}&rdquo;
-                        </p>
-                        {item.scrap.user_note && (
-                          <p className="text-[length:var(--text-caption)] text-text-secondary mb-2">
-                            노트: {item.scrap.user_note}
-                          </p>
-                        )}
-                        <Link
-                          href={getScrapSourceLink(item.scrap)}
-                          className="text-[length:var(--text-caption)] text-accent hover:text-accent-hover transition-colors"
-                        >
-                          원문 아티클 보기
-                        </Link>
-                      </>
-                    ) : (
-                      <p className="text-text-tertiary text-[length:var(--text-small)]">
-                        스크랩 데이터를 불러올 수 없습니다.
-                      </p>
-                    )}
-                    {item.note && (
-                      <p className="text-[length:var(--text-caption)] text-text-secondary mt-2 border-l-2 border-border pl-3">
-                        {item.note}
-                      </p>
-                    )}
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => void handleRemoveItem(item.id)}
-                    isLoading={removingItemId === item.id}
-                    disabled={removingItemId === item.id}
-                  >
-                    제거
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="py-20 text-center border border-border bg-surface mb-10">
-            <p className="text-[length:var(--text-body)] text-text-secondary mb-2">
-              이 컬렉션에 아직 소재가 없습니다.
-            </p>
-            <p className="text-[length:var(--text-small)] text-text-tertiary">
-              아티클에서 텍스트를 드래그하여 소재를 추가해보세요.
-            </p>
-            <Link
-              href="/articles"
-              className="inline-block mt-4 text-[length:var(--text-small)] text-accent hover:text-accent-hover transition-colors"
+
+        <Tabs
+          tabs={VIEW_TABS}
+          activeTab={activeTab}
+          onChange={(nextId) => setActiveTab(nextId as ViewTab)}
+        />
+
+
+        <div className="flex flex-wrap items-center justify-between gap-4 mt-6 mb-8">
+
+          <div className="relative">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setSortDropdownOpen((prev) => !prev);
+              }}
+              className="flex items-center gap-2 border border-border bg-background px-4 py-2 text-[length:var(--text-body)] text-text-primary hover:bg-surface transition-colors"
             >
-              아티클 둘러보기 →
-            </Link>
+              {currentSortLabel}
+              <ChevronDownIcon />
+            </button>
+            {sortDropdownOpen && (
+              <div className="absolute left-0 top-full mt-1 z-20 border border-border bg-background shadow-soft min-w-[120px]">
+                {SORT_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => {
+                      setSortOrder(opt.id);
+                      setSortDropdownOpen(false);
+                    }}
+                    className={`block w-full text-left px-4 py-2 text-[length:var(--text-body)] transition-colors hover:bg-surface ${
+                      sortOrder === opt.id ? "text-text-primary font-medium" : "text-text-secondary"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+
+          <div className="flex items-center gap-2 border border-border bg-background px-3 py-2 flex-1 max-w-md">
+            <SearchIcon />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="스크랩, 노트, 메모를 검색해보세요."
+              className="flex-1 bg-transparent text-[length:var(--text-body)] text-text-primary placeholder:text-placeholder focus:outline-none"
+            />
+          </div>
+        </div>
+
+
+        {activeTab === "by-date" ? (
+
+          filteredItems.length > 0 ? (
+            <div className="space-y-10 mb-10">
+              {dateGroupedItems.map((group) => (
+                <section key={group.dateKey}>
+
+                  <h2 className="text-[length:var(--text-h2)] font-sans font-bold text-text-primary mb-5">
+                    {group.dateLabel}
+                  </h2>
+
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {group.items.map((item) => (
+                      <ScrapCard
+                        key={item.id}
+                        item={item}
+                        onRemove={(itemId) => void handleRemoveItem(itemId)}
+                        isRemoving={removingItemId === item.id}
+                      />
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
+          ) : items.length > 0 ? (
+
+            <div className="py-16 text-center border border-border bg-surface mb-10">
+              <p className="text-[length:var(--text-body)] text-text-secondary">
+                검색 결과가 없습니다.
+              </p>
+            </div>
+          ) : (
+
+            <div className="py-20 text-center border border-border bg-surface mb-10">
+              <p className="text-[length:var(--text-body)] text-text-secondary mb-2">
+                이 컬렉션에 아직 소재가 없습니다.
+              </p>
+              <p className="text-[length:var(--text-small)] text-text-tertiary">
+                아티클에서 텍스트를 드래그하여 소재를 추가해보세요.
+              </p>
+              <Link
+                href="/articles"
+                className="inline-block mt-4 text-[length:var(--text-small)] text-accent hover:text-accent-hover transition-colors"
+              >
+                아티클 둘러보기
+              </Link>
+            </div>
+          )
+        ) : (
+
+          <div className="mb-10">
+            {notes.length > 0 ? (
+              <div className="space-y-4">
+                {notes.map((note) => (
+                  <div key={note.id} className="border border-border bg-background p-5 transition-colors hover:bg-surface">
+                    <p className="text-[length:var(--text-body)] text-text-primary whitespace-pre-wrap leading-relaxed">
+                      {note.content_markdown}
+                    </p>
+                    <p className="mt-3 text-[length:var(--text-caption)] text-text-tertiary">
+                      수정: {formatDateShort(note.updated_at)}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="py-16 text-center border border-border bg-surface">
+                <p className="text-[length:var(--text-body)] text-text-secondary">
+                  아직 등록된 노트가 없습니다.
+                </p>
+              </div>
+            )}
           </div>
         )}
 
-        <section className="border border-border bg-surface p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-[length:var(--text-h3)] font-semibold text-text-primary">
-              컬렉션 노트
-            </h2>
-            <span className="text-[length:var(--text-caption)] text-text-tertiary">
-              API 응답 기준
-            </span>
-          </div>
-
-          {notes.length > 0 ? (
-            <div className="space-y-3">
-              {notes.map((note) => (
-                <div key={note.id} className="border border-border bg-background p-4">
-                  <p className="text-[length:var(--text-small)] text-text-primary whitespace-pre-wrap">
-                    {note.content_markdown}
-                  </p>
-                  <p className="mt-2 text-[length:var(--text-caption)] text-text-tertiary">
-                    수정: {formatDate(note.updated_at)}
-                  </p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-[length:var(--text-small)] text-text-secondary">
-              아직 등록된 노트가 없습니다.
-            </p>
-          )}
-        </section>
 
         {actionError && (
           <div className="mt-4 border border-border bg-surface p-4">

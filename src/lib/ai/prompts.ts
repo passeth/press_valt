@@ -64,10 +64,28 @@ ${params.analysis}
 [선택된 주제]
 ${params.topic}
 
-[글 방향]
+ [글 방향]
 핵심 메시지: ${params.coreMessage}
 강조 소재: ${params.emphasizedScraps}
 추가 지시: ${params.additionalInstructions}`,
+
+  imagePromptSuggestions: (draft: string, style: string) => `당신은 비주얼 디렉터입니다. 아래 글의 내용과 분위기를 분석하여, "${style}" 스타일에 맞는 이미지 생성 프롬프트를 정확히 3개 제안하세요.
+
+규칙:
+1. 각 프롬프트는 영어로 작성하세요 (이미지 생성 AI가 영어를 더 잘 이해합니다).
+2. 각 프롬프트는 구체적이고 시각적으로 묘사적이어야 합니다.
+3. 글의 핵심 메시지와 감정을 시각적으로 표현하세요.
+4. 다음 형식으로 정확히 3개를 제시하세요:
+
+PROMPT_1: [영어 프롬프트]
+PROMPT_2: [영어 프롬프트]
+PROMPT_3: [영어 프롬프트]
+
+[글 내용]
+${draft}
+
+[이미지 스타일]
+${style}`,
 } as const;
 
 /**

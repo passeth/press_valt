@@ -59,22 +59,63 @@ export async function GET(_request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: itemsError.message }, { status: 500 });
     }
 
-    const scrapIds = (items ?? []).map((item) => item.scrap_id).filter((id): id is string => id !== null);
+    const scrapIds = (items ?? []).map((item) => item.scrap_id).filter((sid): sid is string => sid !== null);
     let scrapsById = new Map<string, unknown>();
-
     if (scrapIds.length > 0) {
       const { data: scraps, error: scrapsError } = await supabase
         .from("scraps")
         .select("*")
         .in("id", scrapIds);
-
       if (scrapsError) {
         return NextResponse.json({ error: scrapsError.message }, { status: 500 });
       }
 
       scrapsById = new Map((scraps ?? []).map((scrap) => [scrap.id, scrap]));
-    }
 
+      // Enrich scraps with article metadata (revision -> article lookup)
+      const revisionIds = Array.from(
+        new Set((scraps ?? []).map((s) => s.source_revision_id))
+      );
+
+      if (revisionIds.length > 0) {
+        const { data: revisions } = await supabase
+          .from("admin_article_revisions")
+          .select("id, article_id")
+          .in("id", revisionIds);
+
+        const articleIds = Array.from(
+          new Set((revisions ?? []).map((r) => r.article_id))
+        );
+
+        if (articleIds.length > 0) {
+          const { data: articles } = await supabase
+            .from("admin_articles")
+            .select("id, slug, title, thumbnail_url")
+            .in("id", articleIds);
+
+          const revisionToArticle = new Map<string, string>();
+          (revisions ?? []).forEach((r) => revisionToArticle.set(r.id, r.article_id));
+
+          const articleById = new Map<string, { id: string; slug: string; title: string; thumbnail_url: string | null }>();
+          (articles ?? []).forEach((a) => articleById.set(a.id, a as { id: string; slug: string; title: string; thumbnail_url: string | null }));
+
+          // Re-map scraps with article info attached
+          const enriched = new Map<string, unknown>();
+          scrapsById.forEach((scrap, scrapId) => {
+            const s = scrap as { source_revision_id: string; [key: string]: unknown };
+            const artId = revisionToArticle.get(s.source_revision_id);
+            const art = artId ? articleById.get(artId) : null;
+            enriched.set(scrapId, {
+              ...s,
+              article_title: art?.title ?? null,
+              article_slug: art?.slug ?? null,
+              article_thumbnail_url: art?.thumbnail_url ?? null,
+            });
+          });
+          scrapsById = enriched;
+        }
+      }
+    }
     const detailItems = (items ?? []).map((item) => ({
       ...item,
       scrap: item.scrap_id ? (scrapsById.get(item.scrap_id) ?? null) : null,

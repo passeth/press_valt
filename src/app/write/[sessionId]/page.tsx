@@ -34,7 +34,7 @@ interface CollectionItem {
   scrap: Scrap | null;
 }
 
-type Step = "materials" | "direction" | "analyze" | "suggest" | "draft" | "publish";
+type Step = "materials" | "direction" | "analyze" | "suggest" | "draft" | "thumbnail" | "publish";
 
 const STEPS: { key: Step; label: string }[] = [
   { key: "materials", label: "01 소재 확인" },
@@ -42,7 +42,16 @@ const STEPS: { key: Step; label: string }[] = [
   { key: "analyze", label: "03 소재 분석" },
   { key: "suggest", label: "04 구조 제안" },
   { key: "draft", label: "05 초안 작성" },
-  { key: "publish", label: "06 발행" },
+  { key: "thumbnail", label: "06 썸네일" },
+  { key: "publish", label: "07 발행" },
+];
+
+const IMAGE_STYLES = [
+  { id: "cinematic", label: "시네마틱", description: "영화적 구도와 조명" },
+  { id: "abstract", label: "앱스트랙트", description: "추상적 형태와 색감" },
+  { id: "illustration", label: "일러스트", description: "손그림 느낌의 일러스트" },
+  { id: "sketch", label: "스케치", description: "연필 스케치 스타일" },
+  { id: "colorful", label: "컬러풀", description: "생생한 색감과 패턴" },
 ];
 
 /**
@@ -130,6 +139,13 @@ export default function WritePage({ params }: WritePageProps) {
   const [draft, setDraft] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
+
+  const [imageStyle, setImageStyle] = useState("");
+  const [imagePrompts, setImagePrompts] = useState<string[]>([]);
+  const [selectedPromptIndex, setSelectedPromptIndex] = useState<number | null>(null);
+  const [generatedImageUrl, setGeneratedImageUrl] = useState("");
+  const [imageLoading, setImageLoading] = useState(false);
+  const [imageError, setImageError] = useState("");
 
   // Publish
   const [title, setTitle] = useState("");
@@ -297,6 +313,62 @@ export default function WritePage({ params }: WritePageProps) {
     }
   };
 
+  const handleGeneratePrompts = async () => {
+    if (!draft || !imageStyle) return;
+    setImageLoading(true);
+    setImageError("");
+    setImagePrompts([]);
+    setSelectedPromptIndex(null);
+    setGeneratedImageUrl("");
+
+    try {
+      const res = await fetch("/api/writing/image-prompts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ draft, style: imageStyle }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "서버 오류" }));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      setImagePrompts(data.prompts);
+    } catch (err) {
+      setImageError(err instanceof Error ? err.message : "프롬프트 생성 중 오류가 발생했습니다.");
+    } finally {
+      setImageLoading(false);
+    }
+  };
+
+  const handleGenerateImage = async () => {
+    if (selectedPromptIndex === null || !imagePrompts[selectedPromptIndex]) return;
+    setImageLoading(true);
+    setImageError("");
+    setGeneratedImageUrl("");
+
+    try {
+      const res = await fetch("/api/writing/generate-image", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: imagePrompts[selectedPromptIndex] }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "서버 오류" }));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      setGeneratedImageUrl(data.imageUrl);
+    } catch (err) {
+      setImageError(err instanceof Error ? err.message : "이미지 생성 중 오류가 발생했습니다.");
+    } finally {
+      setImageLoading(false);
+    }
+  };
+
   const handlePublish = async () => {
     if (!title.trim() || !slug.trim() || !draft) return;
     setPublishing(true);
@@ -312,6 +384,7 @@ export default function WritePage({ params }: WritePageProps) {
           markdown: draft,
           status: "published",
           published_at: new Date().toISOString(),
+          thumbnail_url: generatedImageUrl || undefined,
           sources: scraps.map((s) => ({
             scrap_id: s.id,
             usage: "quotation" as const,
@@ -581,14 +654,137 @@ export default function WritePage({ params }: WritePageProps) {
                 >
                   ← 이전
                 </Button>
-                <Button onClick={() => setCurrentStep("publish")}>
+                <Button onClick={() => setCurrentStep("thumbnail")}>
                   발행 준비 →
                 </Button>
               </div>
             </div>
           )}
 
-          {/* Step 6: Publish */}
+          {currentStep === "thumbnail" && (
+            <div className="space-y-6">
+              <h2 className="text-[length:var(--text-h2)] font-serif font-semibold italic mb-4">
+                썸네일 이미지
+              </h2>
+              <p className="text-[length:var(--text-small)] text-text-secondary">
+                글에 어울리는 썸네일 이미지를 AI로 생성할 수 있습니다.
+              </p>
+
+              <div>
+                <label className="block text-[length:var(--text-small)] font-medium mb-3">
+                  이미지 스타일
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+                  {IMAGE_STYLES.map((style) => (
+                    <button
+                      key={style.id}
+                      type="button"
+                      onClick={() => setImageStyle(style.id)}
+                      className={`p-3 border text-left transition-colors ${
+                        imageStyle === style.id
+                          ? "border-accent bg-surface"
+                          : "border-border bg-background hover:bg-surface"
+                      }`}
+                    >
+                      <span className="block text-[length:var(--text-body)] font-medium">
+                        {style.label}
+                      </span>
+                      <span className="block text-[length:var(--text-caption)] text-text-secondary mt-1">
+                        {style.description}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {imageStyle && (
+                <Button
+                  onClick={handleGeneratePrompts}
+                  isLoading={imageLoading && imagePrompts.length === 0}
+                  disabled={!imageStyle}
+                >
+                  프롬프트 생성
+                </Button>
+              )}
+
+              {imagePrompts.length > 0 && (
+                <div>
+                  <label className="block text-[length:var(--text-small)] font-medium mb-3">
+                    프롬프트 선택
+                  </label>
+                  <div className="space-y-2">
+                    {imagePrompts.map((prompt, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => setSelectedPromptIndex(i)}
+                        className={`w-full text-left p-4 border transition-colors ${
+                          selectedPromptIndex === i
+                            ? "border-accent bg-surface"
+                            : "border-border bg-background hover:bg-surface"
+                        }`}
+                      >
+                        <span className="text-[length:var(--text-caption)] text-text-secondary">
+                          프롬프트 {i + 1}
+                        </span>
+                        <p className="text-[length:var(--text-small)] mt-1">{prompt}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {selectedPromptIndex !== null && !generatedImageUrl && (
+                <Button onClick={handleGenerateImage} isLoading={imageLoading}>
+                  이미지 생성
+                </Button>
+              )}
+
+              {imageError && (
+                <div className="p-4 border border-red-300 bg-red-50 text-red-700 text-[length:var(--text-small)]">
+                  {imageError}
+                </div>
+              )}
+
+              {generatedImageUrl && (
+                <div>
+                  <label className="block text-[length:var(--text-small)] font-medium mb-3">
+                    생성된 이미지
+                  </label>
+                  <div className="border border-border overflow-hidden">
+                    <img
+                      src={generatedImageUrl}
+                      alt="Generated thumbnail"
+                      className="w-full max-h-[400px] object-contain bg-surface"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 mt-3">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        setGeneratedImageUrl("");
+                        setSelectedPromptIndex(null);
+                      }}
+                    >
+                      다시 생성
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center gap-3 pt-4">
+                <Button variant="secondary" onClick={() => setCurrentStep("draft")}>
+                  ← 이전
+                </Button>
+                <Button variant="secondary" onClick={() => setCurrentStep("publish")}>
+                  건너뛰기
+                </Button>
+                {generatedImageUrl && <Button onClick={() => setCurrentStep("publish")}>발행 준비 →</Button>}
+              </div>
+            </div>
+          )}
+
           {currentStep === "publish" && (
             <div className="space-y-6">
               <h2 className="text-[length:var(--text-h2)] font-serif font-semibold italic mb-4">
@@ -641,7 +837,7 @@ export default function WritePage({ params }: WritePageProps) {
               <div className="flex items-center gap-3 pt-4">
                 <Button
                   variant="secondary"
-                  onClick={() => setCurrentStep("draft")}
+                  onClick={() => setCurrentStep("thumbnail")}
                 >
                   ← 이전
                 </Button>

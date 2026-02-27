@@ -15,6 +15,7 @@ interface Post {
   markdown: string;
   status: PostStatus;
   published_at: string | null;
+  thumbnail_url: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -258,10 +259,20 @@ export default function MyPressPage() {
         <Tabs tabs={TABS} activeTab={activeTab} onChange={(id) => setActiveTab(id as TabKey)} />
 
         {loading ? (
-          <div className="mt-6 space-y-3">
-            <Skeleton className="h-28 w-full border border-border" />
-            <Skeleton className="h-28 w-full border border-border" />
-            <Skeleton className="h-28 w-full border border-border" />
+          <div className="mt-6 space-y-6">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="border border-border overflow-hidden">
+                <div className="flex flex-col md:flex-row">
+                  <Skeleton className="w-full md:w-[40%] aspect-[16/10] md:min-h-[240px]" />
+                  <div className="flex-1 bg-inverted p-6">
+                    <Skeleton className="h-4 w-20 mb-3 bg-text-inverted/10" />
+                    <Skeleton className="h-6 w-3/4 mb-3 bg-text-inverted/10" />
+                    <Skeleton className="h-4 w-full mb-2 bg-text-inverted/10" />
+                    <Skeleton className="h-4 w-2/3 bg-text-inverted/10" />
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         ) : error ? (
           <div className="mt-6 border border-border bg-surface p-[var(--section-padding)] rounded-[var(--radius-card)]">
@@ -272,7 +283,7 @@ export default function MyPressPage() {
             </Button>
           </div>
         ) : filteredPosts.length > 0 ? (
-          <div className="mt-6 space-y-3">
+          <div className="mt-6 space-y-6">
             {filteredPosts.map((post) => {
               const isPending = pendingPostId === post.id;
               const isPublished = post.status === "published";
@@ -280,56 +291,72 @@ export default function MyPressPage() {
               return (
                 <article
                   key={post.id}
-                  className="group cursor-pointer border border-border bg-background p-5 transition-colors hover:bg-surface"
+                  className="group cursor-pointer border border-border bg-background overflow-hidden transition-shadow hover:shadow-medium"
                   onClick={() => router.push(`/my-press/${post.slug}`)}
                 >
-                  <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-                    <div className="min-w-0 flex-1">
-                      <div className="mb-2 flex items-center gap-2">
-                        <Badge variant={STATUS_VARIANT[post.status]}>{STATUS_LABEL[post.status]}</Badge>
-                        <span className="text-[length:var(--text-caption)] text-text-secondary">
-                          {new Date(post.updated_at).toLocaleDateString("ko-KR")}
-                        </span>
-                      </div>
-                      <h2 className="text-[length:var(--text-body)] font-semibold text-text-primary transition-colors group-hover:text-accent">
-                        {post.title}
-                      </h2>
-                      <p className="mt-2 text-[length:var(--text-small)] text-text-secondary">
-                        {excerptFromMarkdown(post.markdown || "내용이 없습니다.")}
-                      </p>
+                  <div className="flex flex-col md:flex-row md:min-h-[240px]">
+                    <div className="w-full md:w-[40%] aspect-[16/10] md:aspect-auto relative overflow-hidden">
+                      {post.thumbnail_url ? (
+                        <img
+                          src={post.thumbnail_url}
+                          alt={post.title}
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-surface flex items-center justify-center min-h-[180px]">
+                          <span className="text-text-tertiary text-[length:var(--text-caption)]">No Image</span>
+                        </div>
+                      )}
                     </div>
 
-                    <div
-                      className="flex flex-wrap items-center gap-2"
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      {isPublished ? (
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          isLoading={isPending}
-                          onClick={() => updatePostStatus(post, "draft")}
-                        >
-                          발행 취소
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="primary"
-                          size="sm"
-                          isLoading={isPending}
-                          onClick={() => updatePostStatus(post, "published")}
-                        >
-                          발행
-                        </Button>
-                      )}
-                      <Button
-                        variant="danger"
-                        size="sm"
-                        isLoading={isPending}
-                        onClick={() => deletePost(post)}
+                    <div className="flex-1 bg-inverted p-6 flex flex-col justify-between">
+                      <div>
+                        <div className="mb-3 flex items-center gap-2">
+                          <Badge variant={STATUS_VARIANT[post.status]}>{STATUS_LABEL[post.status]}</Badge>
+                          <span className="text-[length:var(--text-caption)] text-text-inverted/50">
+                            {new Date(post.updated_at).toLocaleDateString("ko-KR")}
+                          </span>
+                        </div>
+                        <h2 className="text-[length:var(--text-h2)] font-serif font-semibold italic text-text-inverted leading-tight">
+                          {post.title}
+                        </h2>
+                        <p className="mt-3 text-[length:var(--text-small)] text-text-inverted/70 line-clamp-3">
+                          {excerptFromMarkdown(post.markdown || "내용이 없습니다.")}
+                        </p>
+                      </div>
+
+                      <div
+                        className="flex flex-wrap items-center gap-2 mt-4 pt-4 border-t border-text-inverted/10"
+                        onClick={(event) => event.stopPropagation()}
                       >
-                        삭제
-                      </Button>
+                        {isPublished ? (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            isLoading={isPending}
+                            onClick={() => updatePostStatus(post, "draft")}
+                          >
+                            발행 취소
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            isLoading={isPending}
+                            onClick={() => updatePostStatus(post, "published")}
+                          >
+                            발행
+                          </Button>
+                        )}
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          isLoading={isPending}
+                          onClick={() => deletePost(post)}
+                        >
+                          삭제
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </article>

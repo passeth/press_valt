@@ -34,16 +34,29 @@ interface CollectionItem {
   scrap: Scrap | null;
 }
 
-type Step = "materials" | "direction" | "analyze" | "suggest" | "draft" | "thumbnail" | "publish";
+interface CognitiveResult {
+  diversityScore: string;
+  cognitiveState: string;
+  description: string;
+  suggestion: string;
+  topConcepts: string[];
+  gapConcepts: string[];
+}
+
+type Step = "materials" | "direction" | "analyze" | "infra_cognitive" | "infra_writing" | "infra_critical" | "infra_seo" | "suggest" | "draft" | "thumbnail" | "publish";
 
 const STEPS: { key: Step; label: string }[] = [
   { key: "materials", label: "01 소재 확인" },
   { key: "direction", label: "02 방향 설정" },
   { key: "analyze", label: "03 소재 분석" },
-  { key: "suggest", label: "04 구조 제안" },
-  { key: "draft", label: "05 초안 작성" },
-  { key: "thumbnail", label: "06 썸네일" },
-  { key: "publish", label: "07 발행" },
+  { key: "infra_cognitive", label: "04 인지 다양성" },
+  { key: "infra_writing", label: "05 글쓰기 어시스턴트" },
+  { key: "infra_critical", label: "06 비판적 관점" },
+  { key: "infra_seo", label: "07 SEO 분석" },
+  { key: "suggest", label: "08 구조 제안" },
+  { key: "draft", label: "09 초안 작성" },
+  { key: "thumbnail", label: "10 썸네일" },
+  { key: "publish", label: "11 발행" },
 ];
 
 const IMAGE_STYLES = [
@@ -141,6 +154,13 @@ export default function WritePage({ params }: WritePageProps) {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
 
+  // InfraNodus results
+  const [infraCognitive, setInfraCognitive] = useState<CognitiveResult | null>(null);
+  const [infraWriting, setInfraWriting] = useState("");
+  const [infraCritical, setInfraCritical] = useState("");
+  const [infraSeo, setInfraSeo] = useState("");
+  const [seoKeyword, setSeoKeyword] = useState("");
+
   const [imageStyle, setImageStyle] = useState("");
   const [imagePrompts, setImagePrompts] = useState<string[]>([]);
   const [selectedPromptIndex, setSelectedPromptIndex] = useState<number | null>(null);
@@ -163,33 +183,19 @@ export default function WritePage({ params }: WritePageProps) {
       const data = await res.json();
       setSession(data.session);
 
-      const [collectionRes, allScrapsRes] = await Promise.all([
-        fetch(`/api/collections/${data.session.collection_id}`),
-        fetch("/api/scraps"),
-      ]);
+      const collectionRes = await fetch(`/api/collections/${data.session.collection_id}`);
 
-      const seen = new Set<string>();
-      const merged: Scrap[] = [];
+      const collectionScraps: Scrap[] = [];
       if (collectionRes.ok) {
         const collectionData = await collectionRes.json();
         for (const item of (collectionData.items ?? []) as CollectionItem[]) {
           if (item.scrap) {
-            seen.add(item.scrap.id);
-            merged.push(item.scrap);
+            collectionScraps.push(item.scrap);
           }
         }
       }
 
-      if (allScrapsRes.ok) {
-        const allScrapsData = await allScrapsRes.json();
-        for (const scrap of (allScrapsData.scraps ?? []) as Scrap[]) {
-          if (!seen.has(scrap.id)) {
-            merged.push(scrap);
-          }
-        }
-      }
-
-      setScraps(merged);
+      setScraps(collectionScraps);
     } finally {
       setLoading(false);
     }
@@ -243,6 +249,122 @@ export default function WritePage({ params }: WritePageProps) {
     }
   };
 
+  const handleInfraCognitive = async () => {
+    if (!analysis) return;
+    setAiLoading(true);
+    setAiError("");
+    setInfraCognitive(null);
+
+    try {
+      const res = await fetch("/api/writing/infranodus/cognitive-variability", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: analysis }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "서버 오류" }));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      setInfraCognitive(data);
+      setCurrentStep("infra_cognitive");
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : "인지 다양성 분석 중 오류가 발생했습니다.");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const handleInfraWriting = async () => {
+    if (!analysis) return;
+    setAiLoading(true);
+    setAiError("");
+    setInfraWriting("");
+
+    try {
+      const res = await fetch("/api/writing/infranodus/writing-assistant", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: analysis }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "서버 오류" }));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      setInfraWriting(data.advice);
+      setCurrentStep("infra_writing");
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : "글쓰기 어시스턴트 분석 중 오류가 발생했습니다.");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const handleInfraCritical = async () => {
+    if (!analysis) return;
+    setAiLoading(true);
+    setAiError("");
+    setInfraCritical("");
+
+    try {
+      const res = await fetch("/api/writing/infranodus/critical-perspective", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: analysis }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "서버 오류" }));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      setInfraCritical(data.questions);
+      setCurrentStep("infra_critical");
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : "비판적 관점 분석 중 오류가 발생했습니다.");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const handleInfraSeo = async () => {
+    const query = seoKeyword.trim() || topic.trim();
+    if (!query) {
+      setAiError("SEO 분석을 위한 키워드를 입력하세요.");
+      return;
+    }
+    setAiLoading(true);
+    setAiError("");
+    setInfraSeo("");
+
+    try {
+      const res = await fetch("/api/writing/infranodus/seo-analysis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ searchQuery: query }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "서버 오류" }));
+        throw new Error(err.error || `HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      setInfraSeo(data.seoInsights);
+      setCurrentStep("infra_seo");
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : "SEO 분석 중 오류가 발생했습니다.");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   const handleSuggest = async () => {
     if (!analysis) return;
     setAiLoading(true);
@@ -250,10 +372,18 @@ export default function WritePage({ params }: WritePageProps) {
     setSuggestion("");
 
     try {
+      const enrichedAnalysis = [
+        analysis,
+        infraCognitive && `\n\n[인지 다양성 분석]\n상태: ${infraCognitive.cognitiveState}\n${infraCognitive.description}\n제안: ${infraCognitive.suggestion}`,
+        infraWriting && `\n\n[글쓰기 어시스턴트]\n${infraWriting}`,
+        infraCritical && `\n\n[비판적 관점 - 탐구 질문]\n${infraCritical}`,
+        infraSeo && `\n\n[SEO 분석]\n${infraSeo}`,
+      ].filter(Boolean).join("");
+
       const res = await fetch("/api/writing/suggest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ analysis }),
+        body: JSON.stringify({ analysis: enrichedAnalysis }),
       });
 
       if (!res.ok) {
@@ -593,6 +723,212 @@ export default function WritePage({ params }: WritePageProps) {
                 >
                   ← 이전
                 </Button>
+                <Button onClick={handleInfraCognitive} isLoading={aiLoading} disabled={!analysis}>
+                  인지 다양성 분석 →
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 4: InfraNodus — Cognitive Variability */}
+          {currentStep === "infra_cognitive" && (
+            <div className="space-y-6">
+              <h2 className="text-[length:var(--text-h2)] font-serif font-semibold italic mb-4">
+                인지 다양성 분석
+              </h2>
+              <p className="text-[length:var(--text-small)] text-text-secondary">
+                InfraNodus가 텍스트의 인지적 다양성을 분석합니다. 글의 관점이 편향되었는지, 다양한지 파악합니다.
+              </p>
+              {infraCognitive ? (
+                <div className="space-y-4">
+                  <div className="border border-border p-6 rounded-[var(--radius-card)] bg-surface">
+                    <div className="flex items-center gap-3 mb-4">
+                      <span className="px-3 py-1 bg-accent text-text-inverted text-[length:var(--text-caption)] font-medium">
+                        {infraCognitive.cognitiveState}
+                      </span>
+                    </div>
+                    <p className="text-[length:var(--text-small)] leading-relaxed mb-4">
+                      {infraCognitive.description}
+                    </p>
+                    <div className="border-t border-border pt-4">
+                      <p className="text-[length:var(--text-small)] font-medium mb-1">제안</p>
+                      <p className="text-[length:var(--text-small)] text-text-secondary leading-relaxed">
+                        {infraCognitive.suggestion}
+                      </p>
+                    </div>
+                  </div>
+
+                  {infraCognitive.topConcepts.length > 0 && (
+                    <div className="border border-border p-4 rounded-[var(--radius-card)]">
+                      <p className="text-[length:var(--text-small)] font-medium mb-2">핵심 개념</p>
+                      <div className="flex flex-wrap gap-2">
+                        {infraCognitive.topConcepts.map((concept, i) => (
+                          <span key={i} className="px-2 py-1 border border-border text-[length:var(--text-caption)]">
+                            {typeof concept === "string" ? concept : JSON.stringify(concept)}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {infraCognitive.gapConcepts.length > 0 && (
+                    <div className="border border-border p-4 rounded-[var(--radius-card)]">
+                      <p className="text-[length:var(--text-small)] font-medium mb-2">빈틈 개념 (Gap)</p>
+                      <div className="flex flex-wrap gap-2">
+                        {infraCognitive.gapConcepts.map((concept, i) => (
+                          <span key={i} className="px-2 py-1 border border-dashed border-border text-[length:var(--text-caption)] text-text-secondary">
+                            {typeof concept === "string" ? concept : JSON.stringify(concept)}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : aiLoading ? (
+                <div className="space-y-3">
+                  <Skeleton className="h-6 w-32" />
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-3/4" />
+                </div>
+              ) : (
+                <p className="text-text-secondary">인지 다양성 분석 결과가 여기에 표시됩니다.</p>
+              )}
+              <div className="flex items-center gap-3 pt-4">
+                <Button
+                  variant="secondary"
+                  onClick={() => setCurrentStep("analyze")}
+                >
+                  ← 이전
+                </Button>
+                <Button onClick={handleInfraWriting} isLoading={aiLoading} disabled={!analysis}>
+                  글쓰기 어시스턴트 →
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 5: InfraNodus — Writing Assistant */}
+          {currentStep === "infra_writing" && (
+            <div className="space-y-6">
+              <h2 className="text-[length:var(--text-h2)] font-serif font-semibold italic mb-4">
+                글쓰기 어시스턴트
+              </h2>
+              <p className="text-[length:var(--text-small)] text-text-secondary">
+                InfraNodus가 지식 그래프 구조를 기반으로 글 발전 방향을 제안합니다.
+              </p>
+              {infraWriting ? (
+                <div className="border border-border p-6 rounded-[var(--radius-card)] bg-surface">
+                  <div className="prose whitespace-pre-wrap text-[length:var(--text-small)] leading-relaxed">
+                    {infraWriting}
+                  </div>
+                </div>
+              ) : aiLoading ? (
+                <div className="space-y-3">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-4 w-full" />
+                </div>
+              ) : (
+                <p className="text-text-secondary">글쓰기 어시스턴트 결과가 여기에 표시됩니다.</p>
+              )}
+              <div className="flex items-center gap-3 pt-4">
+                <Button
+                  variant="secondary"
+                  onClick={() => setCurrentStep("infra_cognitive")}
+                >
+                  ← 이전
+                </Button>
+                <Button onClick={handleInfraCritical} isLoading={aiLoading} disabled={!analysis}>
+                  비판적 관점 분석 →
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 6: InfraNodus — Critical Perspective */}
+          {currentStep === "infra_critical" && (
+            <div className="space-y-6">
+              <h2 className="text-[length:var(--text-h2)] font-serif font-semibold italic mb-4">
+                비판적 관점
+              </h2>
+              <p className="text-[length:var(--text-small)] text-text-secondary">
+                콘텐츠의 빈틈을 메우는 탐구 질문을 생성합니다. 가정을 의심하고 대안적 시각을 제시합니다.
+              </p>
+              {infraCritical ? (
+                <div className="border border-border p-6 rounded-[var(--radius-card)] bg-surface">
+                  <div className="prose whitespace-pre-wrap text-[length:var(--text-small)] leading-relaxed">
+                    {infraCritical}
+                  </div>
+                </div>
+              ) : aiLoading ? (
+                <div className="space-y-3">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-4 w-full" />
+                </div>
+              ) : (
+                <p className="text-text-secondary">비판적 관점 분석 결과가 여기에 표시됩니다.</p>
+              )}
+              <div className="flex items-center gap-3 pt-4">
+                <Button
+                  variant="secondary"
+                  onClick={() => setCurrentStep("infra_writing")}
+                >
+                  ← 이전
+                </Button>
+                <Button onClick={() => setCurrentStep("infra_seo")} disabled={!analysis}>
+                  SEO 분석 →
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Step 7: InfraNodus — SEO Analysis */}
+          {currentStep === "infra_seo" && (
+            <div className="space-y-6">
+              <h2 className="text-[length:var(--text-h2)] font-serif font-semibold italic mb-4">
+                SEO 분석
+              </h2>
+              <p className="text-[length:var(--text-small)] text-text-secondary">
+                사람들이 검색하지만 찾지 못하는 콘텐츠 갭을 분석합니다.
+              </p>
+              <div>
+                <label className="block text-[length:var(--text-small)] font-medium mb-2">
+                  SEO 키워드
+                </label>
+                <input
+                  type="text"
+                  value={seoKeyword}
+                  onChange={(e) => setSeoKeyword(e.target.value)}
+                  placeholder={topic || "검색 키워드를 입력하세요"}
+                  className="w-full px-4 py-2 border border-border rounded-[var(--radius-input)] text-[length:var(--text-body)] placeholder:text-placeholder bg-background text-text-primary focus:outline-none focus:border-accent transition-colors"
+                />
+              </div>
+              {!infraSeo && (
+                <Button onClick={handleInfraSeo} isLoading={aiLoading}>
+                  SEO 분석 시작
+                </Button>
+              )}
+              {infraSeo ? (
+                <div className="border border-border p-6 rounded-[var(--radius-card)] bg-surface">
+                  <div className="prose whitespace-pre-wrap text-[length:var(--text-small)] leading-relaxed">
+                    {infraSeo}
+                  </div>
+                </div>
+              ) : aiLoading ? (
+                <div className="space-y-3">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-4 w-full" />
+                </div>
+              ) : null}
+              <div className="flex items-center gap-3 pt-4">
+                <Button
+                  variant="secondary"
+                  onClick={() => setCurrentStep("infra_critical")}
+                >
+                  ← 이전
+                </Button>
                 <Button onClick={handleSuggest} isLoading={aiLoading} disabled={!analysis}>
                   구조 제안 받기 →
                 </Button>
@@ -600,7 +936,7 @@ export default function WritePage({ params }: WritePageProps) {
             </div>
           )}
 
-          {/* Step 4: Suggest */}
+          {/* Step 8: Suggest */}
           {currentStep === "suggest" && (
             <div className="space-y-6">
               <h2 className="text-[length:var(--text-h2)] font-serif font-semibold italic mb-4">
@@ -664,7 +1000,7 @@ export default function WritePage({ params }: WritePageProps) {
               <div className="flex items-center gap-3 pt-4">
                 <Button
                   variant="secondary"
-                  onClick={() => setCurrentStep("analyze")}
+                  onClick={() => setCurrentStep("infra_seo")}
                 >
                   ← 이전
                 </Button>
@@ -679,7 +1015,7 @@ export default function WritePage({ params }: WritePageProps) {
             </div>
           )}
 
-          {/* Step 5: Draft */}
+          {/* Step 9: Draft */}
           {currentStep === "draft" && (
             <div className="space-y-6">
               <h2 className="text-[length:var(--text-h2)] font-serif font-semibold italic mb-4">

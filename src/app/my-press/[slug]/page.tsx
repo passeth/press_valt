@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { marked } from "marked";
 import { Footer, PageContainer, TopNav } from "@/components/layout";
 import { Badge, Button, Skeleton } from "@/components/ui";
 import { createClient } from "@/lib/supabase/client";
@@ -31,6 +32,10 @@ interface Scrap {
   id: string;
   exact_quote: string;
   user_note: string | null;
+  source_revision_id: string;
+  article_slug: string | null;
+  article_title: string | null;
+  article_thumbnail_url: string | null;
 }
 
 const STATUS_LABEL: Record<PostStatus, string> = {
@@ -127,9 +132,54 @@ export default function MyPressPostPage() {
         const supabase = createClient();
         const { data: scrapRows } = await supabase
           .from("scraps")
-          .select("id, exact_quote, user_note")
+          .select("id, exact_quote, user_note, source_revision_id")
           .in("id", scrapIds);
-        setScraps(scrapRows ?? []);
+
+        const enrichedScraps: Scrap[] = [];
+        if (scrapRows && scrapRows.length > 0) {
+          const revisionIds = [...new Set(scrapRows.map((s) => s.source_revision_id))];
+          const { data: revisions } = await supabase
+            .from("admin_article_revisions")
+            .select("id, article_id")
+            .in("id", revisionIds);
+
+          const revToArticle = new Map<string, string>();
+          (revisions ?? []).forEach((r) => revToArticle.set(r.id, r.article_id));
+
+          const articleIds = [...new Set(Array.from(revToArticle.values()))];
+          const { data: articles } = await supabase
+            .from("admin_articles")
+            .select("id, slug, title, thumbnail_url")
+            .in("id", articleIds);
+
+          const articleMap = new Map<string, { slug: string; title: string; thumbnail_url: string | null }>();
+          (articles ?? []).forEach((a) =>
+            articleMap.set(a.id, {
+              slug: a.slug,
+              title: a.title,
+              thumbnail_url: a.thumbnail_url,
+            }),
+          );
+
+          for (const scrap of scrapRows) {
+            const artId = revToArticle.get(scrap.source_revision_id);
+            const art = artId ? articleMap.get(artId) : null;
+
+            enrichedScraps.push({
+              id: scrap.id,
+              exact_quote: scrap.exact_quote,
+              user_note: scrap.user_note,
+              source_revision_id: scrap.source_revision_id,
+              article_slug: art?.slug ?? null,
+              article_title: art?.title ?? null,
+              article_thumbnail_url: art?.thumbnail_url ?? null,
+            });
+          }
+        }
+
+        setScraps(enrichedScraps);
+      } else {
+        setScraps([]);
       }
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "알 수 없는 오류가 발생했습니다.");
@@ -177,6 +227,11 @@ export default function MyPressPostPage() {
       day: "numeric",
     });
   }, [post]);
+
+  const renderedMarkdown = useMemo(() => {
+    if (!post?.markdown) return "";
+    return marked.parse(post.markdown, { async: false }) as string;
+  }, [post?.markdown]);
 
   const togglePublish = useCallback(async () => {
     if (!post) {
@@ -335,11 +390,10 @@ export default function MyPressPostPage() {
             </header>
 
             <article className="border-t border-border pt-8">
-              {post.rendered_html ? (
-                <div className="prose" dangerouslySetInnerHTML={{ __html: post.rendered_html }} />
-              ) : (
-                <div className="prose whitespace-pre-wrap">{post.markdown}</div>
-              )}
+              <div
+                className="prose whitespace-pre-wrap"
+                dangerouslySetInnerHTML={{ __html: post.rendered_html || renderedMarkdown }}
+              />
             </article>
 
             {sources.length > 0 && (
@@ -352,21 +406,52 @@ export default function MyPressPostPage() {
                     const scrap = scraps.find((s) => s.id === source.scrap_id);
                     return (
                       <li key={source.id} className="border border-border bg-surface p-4">
-                        <p className="text-[length:var(--text-small)] text-text-primary">
-                          {USAGE_LABEL[source.usage] ?? source.usage}
-                        </p>
-                        {scrap?.exact_quote ? (
-                          <p className="mt-2 text-[length:var(--text-small)] italic text-text-secondary">
-                            &ldquo;{scrap.exact_quote}&rdquo;
-                          </p>
+                        <div className="flex items-start gap-3">
+                          <span className="text-[length:var(--text-caption)] text-text-tertiary font-medium shrink-0 pt-0.5">
+                            {USAGE_LABEL[source.usage] ?? source.usage}
+                          </span>
+                        </div>
+                        {scrap ? (
+                          <div className="mt-2">
+                            {scrap.article_slug ? (
+                              <Link
+                                href={`/articles/${scrap.article_slug}`}
+                                className="flex items-start gap-4 group transition-colors hover:bg-background p-2 -mx-2"
+                              >
+                                {scrap.article_thumbnail_url && (
+                                  <div className="w-16 h-16 shrink-0 overflow-hidden border border-border">
+                                    <img
+                                      src={scrap.article_thumbnail_url}
+                                      alt=""
+                                      className="w-full h-full object-cover"
+                                    />
+                                  </div>
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-[length:var(--text-small)] italic text-text-secondary group-hover:text-text-primary transition-colors">
+                                    &ldquo;{scrap.exact_quote}&rdquo;
+                                  </p>
+                                  {scrap.article_title && (
+                                    <p className="mt-1 text-[length:var(--text-caption)] text-text-tertiary">
+                                      {scrap.article_title}
+                                    </p>
+                                  )}
+                                </div>
+                              </Link>
+                            ) : (
+                              <p className="text-[length:var(--text-small)] italic text-text-secondary">
+                                &ldquo;{scrap.exact_quote}&rdquo;
+                              </p>
+                            )}
+                            {scrap.user_note && (
+                              <p className="mt-2 text-[length:var(--text-caption)] text-text-secondary">
+                                메모: {scrap.user_note}
+                              </p>
+                            )}
+                          </div>
                         ) : (
                           <p className="mt-2 text-[length:var(--text-small)] text-text-secondary">
                             스크랩 본문을 불러오지 못했습니다.
-                          </p>
-                        )}
-                        {scrap?.user_note && (
-                          <p className="mt-2 text-[length:var(--text-caption)] text-text-secondary">
-                            메모: {scrap.user_note}
                           </p>
                         )}
                       </li>

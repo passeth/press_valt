@@ -20,6 +20,16 @@ interface Post {
   updated_at: string;
 }
 
+interface BookmarkedArticle {
+  id: string;
+  slug: string;
+  title: string;
+  summary: string | null;
+  thumbnail_url: string | null;
+  category: string | null;
+  bookmarked_at: string;
+}
+
 interface CollectionOption {
   id: string;
   title: string;
@@ -61,6 +71,8 @@ export default function MyPressPage() {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [pendingPostId, setPendingPostId] = useState<string | null>(null);
+  const [bookmarkedArticles, setBookmarkedArticles] = useState<BookmarkedArticle[]>([]);
+  const [loadingBookmarks, setLoadingBookmarks] = useState(false);
 
 
   const [showCollectionPicker, setShowCollectionPicker] = useState(false);
@@ -99,6 +111,28 @@ export default function MyPressPage() {
   useEffect(() => {
     fetchPosts();
   }, [fetchPosts]);
+
+  useEffect(() => {
+    if (activeTab !== "archived") {
+      return;
+    }
+
+    const fetchBookmarks = async () => {
+      setLoadingBookmarks(true);
+      try {
+        const res = await fetch("/api/articles/bookmarked", { cache: "no-store" });
+        if (res.ok) {
+          const data = (await res.json()) as { articles?: BookmarkedArticle[] };
+          setBookmarkedArticles(data.articles ?? []);
+        }
+      } catch {}
+      finally {
+        setLoadingBookmarks(false);
+      }
+    };
+
+    void fetchBookmarks();
+  }, [activeTab]);
 
   const filteredPosts = useMemo(() => {
     if (activeTab === "all") {
@@ -282,7 +316,7 @@ export default function MyPressPage() {
               다시 시도
             </Button>
           </div>
-        ) : filteredPosts.length > 0 ? (
+        ) : filteredPosts.length > 0 || (activeTab === "archived" && (bookmarkedArticles.length > 0 || loadingBookmarks)) ? (
           <div className="mt-6 space-y-6">
             {filteredPosts.map((post) => {
               const isPending = pendingPostId === post.id;
@@ -362,6 +396,79 @@ export default function MyPressPage() {
                 </article>
               );
             })}
+
+            {activeTab === "archived" && bookmarkedArticles.length > 0 && (
+              <>
+                <div className="border-t border-border pt-6 mt-8">
+                  <h2 className="text-[length:var(--text-h3)] font-serif font-semibold italic text-text-primary mb-4">
+                    보관한 아티클
+                  </h2>
+                </div>
+                {bookmarkedArticles.map((article) => (
+                  <article
+                    key={`bookmark-${article.id}`}
+                    className="group cursor-pointer border border-border bg-background overflow-hidden transition-shadow hover:shadow-medium"
+                    onClick={() => router.push(`/articles/${article.slug}`)}
+                  >
+                    <div className="flex flex-col md:flex-row md:min-h-[240px]">
+                      <div className="w-full md:w-[40%] aspect-[16/10] md:aspect-auto relative overflow-hidden">
+                        {article.thumbnail_url ? (
+                          <img
+                            src={article.thumbnail_url}
+                            alt={article.title}
+                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.02]"
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-surface flex items-center justify-center min-h-[180px]">
+                            <span className="text-text-tertiary text-[length:var(--text-caption)]">No Image</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 bg-inverted p-6 flex flex-col justify-between">
+                        <div>
+                          <div className="mb-3 flex items-center gap-2">
+                            <Badge variant="default">보관</Badge>
+                            {article.category && (
+                              <span className="text-[length:var(--text-caption)] text-text-inverted/50">
+                                {article.category}
+                              </span>
+                            )}
+                            <span className="text-[length:var(--text-caption)] text-text-inverted/50">
+                              {new Date(article.bookmarked_at).toLocaleDateString("ko-KR")}
+                            </span>
+                          </div>
+                          <h2 className="text-[length:var(--text-h2)] font-serif font-semibold italic text-text-inverted leading-tight">
+                            {article.title}
+                          </h2>
+                          {article.summary && (
+                            <p className="mt-3 text-[length:var(--text-small)] text-text-inverted/70 line-clamp-3">
+                              {article.summary}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </>
+            )}
+
+            {activeTab === "archived" && loadingBookmarks && (
+              <div className="space-y-6 mt-6">
+                {[1, 2].map((i) => (
+                  <div key={`bm-skel-${i}`} className="border border-border overflow-hidden">
+                    <div className="flex flex-col md:flex-row">
+                      <Skeleton className="w-full md:w-[40%] aspect-[16/10] md:min-h-[240px]" />
+                      <div className="flex-1 bg-inverted p-6">
+                        <Skeleton className="h-4 w-20 mb-3 bg-text-inverted/10" />
+                        <Skeleton className="h-6 w-3/4 mb-3 bg-text-inverted/10" />
+                        <Skeleton className="h-4 w-full mb-2 bg-text-inverted/10" />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         ) : (
           <div className="mt-6 border border-border bg-surface p-8 text-center">

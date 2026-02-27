@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
           user.user_metadata?.display_name ?? user.user_metadata?.name ?? null,
         handle: user.user_metadata?.handle ?? null,
       },
-      { onConflict: "id", ignoreDuplicates: false }
+      { onConflict: "id", ignoreDuplicates: true }
     );
 
     if (profileUpsertError) {

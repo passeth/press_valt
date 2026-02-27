@@ -158,6 +158,7 @@ async function syncContent(): Promise<void> {
               tags: frontmatter.tags || [],
               thumbnail_url: thumbnailUrl,
               status: 'published',
+              created_by: '60904942-0628-4169-ac56-b69647d4b501',
               updated_at: new Date().toISOString(),
             },
             { onConflict: 'slug' }

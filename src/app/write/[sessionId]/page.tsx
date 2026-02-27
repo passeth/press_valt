@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState, use, useCallback } from "react";
+import { useEffect, useState, use, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
+import { marked } from "marked";
 import { TopNav } from "@/components/layout/TopNav";
 import { Footer } from "@/components/layout/Footer";
 import { PageContainer } from "@/components/layout/PageContainer";
@@ -47,20 +48,16 @@ interface CognitiveResult {
   gapConcepts: string[];
 }
 
-type Step = "materials" | "direction" | "analyze" | "infra_cognitive" | "infra_writing" | "infra_critical" | "infra_seo" | "suggest" | "draft" | "thumbnail" | "publish";
+type Step = "materials" | "direction" | "infra_combined" | "suggest" | "draft" | "thumbnail" | "publish";
 
 const STEPS: { key: Step; label: string }[] = [
   { key: "materials", label: "01 소재 확인" },
   { key: "direction", label: "02 방향 설정" },
-  { key: "analyze", label: "03 소재 분석" },
-  { key: "infra_cognitive", label: "04 인지 다양성" },
-  { key: "infra_writing", label: "05 글쓰기 어시스턴트" },
-  { key: "infra_critical", label: "06 비판적 관점" },
-  { key: "infra_seo", label: "07 SEO 분석" },
-  { key: "suggest", label: "08 구조 제안" },
-  { key: "draft", label: "09 초안 작성" },
-  { key: "thumbnail", label: "10 썸네일" },
-  { key: "publish", label: "11 발행" },
+  { key: "infra_combined", label: "03 AI 분석" },
+  { key: "suggest", label: "04 구조 제안" },
+  { key: "draft", label: "05 초안 작성" },
+  { key: "thumbnail", label: "06 썸네일" },
+  { key: "publish", label: "07 발행" },
 ];
 
 const IMAGE_STYLES = [
@@ -71,16 +68,10 @@ const IMAGE_STYLES = [
   { id: "colorful", label: "컬러풀", description: "생생한 색감과 패턴" },
 ];
 
-/**
- * Read a streaming text response from AI SDK's streamText
- */
 async function readStream(
   res: Response,
   onChunk: (text: string) => void
 ): Promise<string> {
-  // AI SDK streamText returns either DataStream or TextStream
-  // TextStream: plain text chunks
-  // DataStream: SSE format with data prefixes
   const contentType = res.headers.get("content-type") || "";
   const reader = res.body?.getReader();
   if (!reader) throw new Error("No response body");
@@ -95,11 +86,9 @@ async function readStream(
     const chunk = decoder.decode(value, { stream: true });
 
     if (contentType.includes("text/plain")) {
-      // TextStream: raw text
       full += chunk;
       onChunk(full);
     } else {
-      // DataStream (SSE): parse "0:text\n" format
       const lines = chunk.split("\n");
       for (const line of lines) {
         if (line.startsWith("0:")) {
@@ -118,9 +107,6 @@ async function readStream(
   return full;
 }
 
-/**
- * Format scraps into a materials string for the API
- */
 function formatMaterials(scraps: Scrap[]): string {
   return scraps
     .map(
@@ -144,13 +130,11 @@ export default function WritePage({ params }: WritePageProps) {
   const [loading, setLoading] = useState(true);
   const [currentStep, setCurrentStep] = useState<Step>("materials");
 
-  // Direction inputs
   const [topic, setTopic] = useState("");
   const [angle, setAngle] = useState("");
   const [audience, setAudience] = useState("");
   const [tone, setTone] = useState("");
 
-  // AI outputs
   const [analysis, setAnalysis] = useState("");
   const [suggestion, setSuggestion] = useState("");
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState<number | null>(null);
@@ -158,13 +142,14 @@ export default function WritePage({ params }: WritePageProps) {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState("");
 
-  // InfraNodus results
   const [infraCognitive, setInfraCognitive] = useState<CognitiveResult | null>(null);
   const [infraWriting, setInfraWriting] = useState("");
   const [infraCritical, setInfraCritical] = useState("");
   const [infraSeo, setInfraSeo] = useState("");
   const [seoKeyword, setSeoKeyword] = useState("");
   const [infraGraphs, setInfraGraphs] = useState<Record<string, GraphData>>({});
+  const [infraLoading, setInfraLoading] = useState({ cognitive: false, writing: false, critical: false, seo: false });
+  const [userNotes, setUserNotes] = useState("");
 
   const [imageStyle, setImageStyle] = useState("");
   const [imagePrompts, setImagePrompts] = useState<string[]>([]);
@@ -173,10 +158,31 @@ export default function WritePage({ params }: WritePageProps) {
   const [imageLoading, setImageLoading] = useState(false);
   const [imageError, setImageError] = useState("");
 
-  // Publish
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
   const [publishing, setPublishing] = useState(false);
+
+  const anyInfraLoading = infraLoading.cognitive || infraLoading.writing || infraLoading.critical || infraLoading.seo;
+
+  const renderedAnalysis = useMemo(() => {
+    if (!analysis || aiLoading) return "";
+    return marked.parse(analysis, { async: false }) as string;
+  }, [analysis, aiLoading]);
+
+  const renderedWriting = useMemo(() => {
+    if (!infraWriting) return "";
+    return marked.parse(infraWriting, { async: false }) as string;
+  }, [infraWriting]);
+
+  const renderedCritical = useMemo(() => {
+    if (!infraCritical) return "";
+    return marked.parse(infraCritical, { async: false }) as string;
+  }, [infraCritical]);
+
+  const renderedSeo = useMemo(() => {
+    if (!infraSeo) return "";
+    return marked.parse(infraSeo, { async: false }) as string;
+  }, [infraSeo]);
 
   const fetchSession = useCallback(async () => {
     try {
@@ -220,6 +226,81 @@ export default function WritePage({ params }: WritePageProps) {
     fetchSession();
   }, [fetchSession]);
 
+  const runAllInfraAnalysis = async (analysisText: string) => {
+    const query = seoKeyword.trim() || topic.trim();
+    setInfraLoading({ cognitive: true, writing: true, critical: true, seo: !!query });
+
+    const cognitiveTask = (async () => {
+      try {
+        const res = await fetch("/api/writing/infranodus/cognitive-variability", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: analysisText }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setInfraCognitive(data);
+          if (data.graph) setInfraGraphs((prev) => ({ ...prev, cognitive: data.graph }));
+        }
+      } catch {}
+      finally { setInfraLoading((prev) => ({ ...prev, cognitive: false })); }
+    })();
+
+    const writingTask = (async () => {
+      try {
+        const res = await fetch("/api/writing/infranodus/writing-assistant", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: analysisText }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setInfraWriting(data.advice);
+          if (data.graph) setInfraGraphs((prev) => ({ ...prev, writing: data.graph }));
+        }
+      } catch {}
+      finally { setInfraLoading((prev) => ({ ...prev, writing: false })); }
+    })();
+
+    const criticalTask = (async () => {
+      try {
+        const res = await fetch("/api/writing/infranodus/critical-perspective", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text: analysisText }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setInfraCritical(data.questions);
+          if (data.graph) setInfraGraphs((prev) => ({ ...prev, critical: data.graph }));
+        }
+      } catch {}
+      finally { setInfraLoading((prev) => ({ ...prev, critical: false })); }
+    })();
+
+    const seoTask = (async () => {
+      if (!query) {
+        setInfraLoading((prev) => ({ ...prev, seo: false }));
+        return;
+      }
+      try {
+        const res = await fetch("/api/writing/infranodus/seo-analysis", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ searchQuery: query }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setInfraSeo(data.seoInsights);
+          if (data.graph) setInfraGraphs((prev) => ({ ...prev, seo: data.graph }));
+        }
+      } catch {}
+      finally { setInfraLoading((prev) => ({ ...prev, seo: false })); }
+    })();
+
+    await Promise.allSettled([cognitiveTask, writingTask, criticalTask, seoTask]);
+  };
+
   const handleAnalyze = async () => {
     if (scraps.length === 0) {
       setAiError("소재가 없습니다. 먼저 콜렉션에 소재를 추가하세요.");
@@ -228,6 +309,12 @@ export default function WritePage({ params }: WritePageProps) {
     setAiLoading(true);
     setAiError("");
     setAnalysis("");
+    setInfraCognitive(null);
+    setInfraWriting("");
+    setInfraCritical("");
+    setInfraSeo("");
+    setInfraGraphs({});
+    setCurrentStep("infra_combined");
 
     try {
       const materials = formatMaterials(scraps);
@@ -255,139 +342,11 @@ export default function WritePage({ params }: WritePageProps) {
         throw new Error(err.error || `HTTP ${res.status}`);
       }
 
-      await readStream(res, (text) => setAnalysis(text));
-      setCurrentStep("analyze");
+      const fullAnalysis = await readStream(res, (text) => setAnalysis(text));
+      setAiLoading(false);
+      void runAllInfraAnalysis(fullAnalysis);
     } catch (err) {
       setAiError(err instanceof Error ? err.message : "분석 중 오류가 발생했습니다.");
-    } finally {
-      setAiLoading(false);
-    }
-  };
-
-  const handleInfraCognitive = async () => {
-    if (!analysis) return;
-    setAiLoading(true);
-    setAiError("");
-    setInfraCognitive(null);
-
-    try {
-      const res = await fetch("/api/writing/infranodus/cognitive-variability", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: analysis }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: "서버 오류" }));
-        throw new Error(err.error || `HTTP ${res.status}`);
-      }
-
-      const data = await res.json();
-      setInfraCognitive(data);
-      if (data.graph) {
-        setInfraGraphs(prev => ({ ...prev, cognitive: data.graph }));
-      }
-      setCurrentStep("infra_cognitive");
-    } catch (err) {
-      setAiError(err instanceof Error ? err.message : "인지 다양성 분석 중 오류가 발생했습니다.");
-    } finally {
-      setAiLoading(false);
-    }
-  };
-
-  const handleInfraWriting = async () => {
-    if (!analysis) return;
-    setAiLoading(true);
-    setAiError("");
-    setInfraWriting("");
-
-    try {
-      const res = await fetch("/api/writing/infranodus/writing-assistant", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: analysis }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: "서버 오류" }));
-        throw new Error(err.error || `HTTP ${res.status}`);
-      }
-
-      const data = await res.json();
-      setInfraWriting(data.advice);
-      if (data.graph) {
-        setInfraGraphs(prev => ({ ...prev, writing: data.graph }));
-      }
-      setCurrentStep("infra_writing");
-    } catch (err) {
-      setAiError(err instanceof Error ? err.message : "글쓰기 어시스턴트 분석 중 오류가 발생했습니다.");
-    } finally {
-      setAiLoading(false);
-    }
-  };
-
-  const handleInfraCritical = async () => {
-    if (!analysis) return;
-    setAiLoading(true);
-    setAiError("");
-    setInfraCritical("");
-
-    try {
-      const res = await fetch("/api/writing/infranodus/critical-perspective", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: analysis }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: "서버 오류" }));
-        throw new Error(err.error || `HTTP ${res.status}`);
-      }
-
-      const data = await res.json();
-      setInfraCritical(data.questions);
-      if (data.graph) {
-        setInfraGraphs(prev => ({ ...prev, critical: data.graph }));
-      }
-      setCurrentStep("infra_critical");
-    } catch (err) {
-      setAiError(err instanceof Error ? err.message : "비판적 관점 분석 중 오류가 발생했습니다.");
-    } finally {
-      setAiLoading(false);
-    }
-  };
-
-  const handleInfraSeo = async () => {
-    const query = seoKeyword.trim() || topic.trim();
-    if (!query) {
-      setAiError("SEO 분석을 위한 키워드를 입력하세요.");
-      return;
-    }
-    setAiLoading(true);
-    setAiError("");
-    setInfraSeo("");
-
-    try {
-      const res = await fetch("/api/writing/infranodus/seo-analysis", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ searchQuery: query }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: "서버 오류" }));
-        throw new Error(err.error || `HTTP ${res.status}`);
-      }
-
-      const data = await res.json();
-      setInfraSeo(data.seoInsights);
-      if (data.graph) {
-        setInfraGraphs(prev => ({ ...prev, seo: data.graph }));
-      }
-      setCurrentStep("infra_seo");
-    } catch (err) {
-      setAiError(err instanceof Error ? err.message : "SEO 분석 중 오류가 발생했습니다.");
-    } finally {
       setAiLoading(false);
     }
   };
@@ -405,6 +364,7 @@ export default function WritePage({ params }: WritePageProps) {
         infraWriting && `\n\n[글쓰기 어시스턴트]\n${infraWriting}`,
         infraCritical && `\n\n[비판적 관점 - 탐구 질문]\n${infraCritical}`,
         infraSeo && `\n\n[SEO 분석]\n${infraSeo}`,
+        userNotes.trim() && `\n\n[사용자 추가 아이디어]\n${userNotes.trim()}`,
       ].filter(Boolean).join("");
 
       const res = await fetch("/api/writing/suggest", {
@@ -577,7 +537,6 @@ export default function WritePage({ params }: WritePageProps) {
       <TopNav />
 
       <PageContainer maxWidth="article">
-        {/* Header */}
         <div className="mb-8">
           <h1 className="text-[length:var(--text-h1)] font-serif font-semibold italic mb-2">
             글 쓰기
@@ -587,7 +546,6 @@ export default function WritePage({ params }: WritePageProps) {
           </p>
         </div>
 
-        {/* Step indicator */}
         <div className="flex flex-wrap gap-1 mb-8 pb-6 border-b border-border">
           {STEPS.map((step, i) => (
             <button
@@ -606,14 +564,12 @@ export default function WritePage({ params }: WritePageProps) {
           ))}
         </div>
 
-        {/* Error display */}
         {aiError && (
           <div className="mb-6 p-4 border border-red-300 bg-red-50 text-red-700 text-[length:var(--text-small)] rounded-[var(--radius-card)]">
             {aiError}
           </div>
         )}
 
-        {/* Step content */}
         <div className="min-h-[400px]">
           {/* Step 1: Materials */}
           {currentStep === "materials" && (
@@ -722,27 +678,176 @@ export default function WritePage({ params }: WritePageProps) {
             </div>
           )}
 
-          {/* Step 3: Analyze */}
-          {currentStep === "analyze" && (
-            <div className="space-y-6">
-              <h2 className="text-[length:var(--text-h2)] font-serif font-semibold italic mb-4">
-                소재 분석 결과
-              </h2>
-              {analysis ? (
-                <div className="border border-border p-6 rounded-[var(--radius-card)] bg-surface">
-                  <div className="prose whitespace-pre-wrap text-[length:var(--text-small)] leading-relaxed">
-                    {analysis}
+          {/* Step 3: Combined AI Analysis (Writing Assistant + Critical + SEO) */}
+          {currentStep === "infra_combined" && (
+            <div className="space-y-8">
+              <div>
+                <h2 className="text-[length:var(--text-h2)] font-serif font-semibold italic mb-2">
+                  AI 분석
+                </h2>
+                <p className="text-[length:var(--text-small)] text-text-secondary">
+                  소재를 분석하고 InfraNodus로 다각도 인사이트를 생성합니다.
+                </p>
+              </div>
+
+              {aiLoading && (
+                <div className="border border-border p-6 bg-surface">
+                  <div className="flex items-center gap-3">
+                    <span
+                      className="inline-block h-4 w-4 border-2 border-accent border-t-transparent animate-spin"
+                      style={{ borderRadius: "50%" }}
+                    />
+                    <p className="text-[length:var(--text-small)] text-text-secondary">
+                      소재를 분석하고 있습니다...
+                    </p>
                   </div>
                 </div>
-              ) : aiLoading ? (
-                <div className="space-y-3">
-                  <Skeleton className="h-4 w-3/4" />
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-4 w-2/3" />
-                </div>
-              ) : (
-                <p className="text-text-secondary">분석 결과가 여기에 표시됩니다.</p>
               )}
+
+              {!aiLoading && analysis && (
+                <details className="border border-border">
+                  <summary className="px-4 py-3 bg-surface cursor-pointer text-[length:var(--text-small)] font-medium text-text-primary hover:bg-background transition-colors">
+                    소재 분석 결과 보기
+                  </summary>
+                  <div className="p-4 border-t border-border">
+                    <div
+                      className="prose text-[length:var(--text-small)] leading-relaxed"
+                      dangerouslySetInnerHTML={{ __html: renderedAnalysis }}
+                    />
+                  </div>
+                </details>
+              )}
+
+              {!aiLoading && analysis && (
+                <>
+                  {/* Writing Assistant */}
+                  <section className="border border-border">
+                    <div className="px-4 py-3 border-b border-border bg-surface">
+                      <h3 className="text-[length:var(--text-body)] font-semibold">글쓰기 어시스턴트</h3>
+                      <p className="text-[length:var(--text-caption)] text-text-secondary mt-0.5">
+                        지식 그래프 구조를 기반으로 글 발전 방향을 제안합니다.
+                      </p>
+                    </div>
+                    <div className="p-4">
+                      {infraLoading.writing ? (
+                        <div className="space-y-3">
+                          <Skeleton className="h-4 w-full" />
+                          <Skeleton className="h-4 w-3/4" />
+                          <Skeleton className="h-4 w-full" />
+                        </div>
+                      ) : infraWriting ? (
+                        <div
+                          className="prose text-[length:var(--text-small)] leading-relaxed"
+                          dangerouslySetInnerHTML={{ __html: renderedWriting }}
+                        />
+                      ) : (
+                        <p className="text-text-tertiary text-[length:var(--text-small)]">결과를 불러오지 못했습니다.</p>
+                      )}
+                    </div>
+                    {infraGraphs.writing && (
+                      <div className="border-t border-border">
+                        <div className="px-4 py-2 border-b border-border bg-surface">
+                          <p className="text-[length:var(--text-caption)] text-text-secondary font-medium tracking-wide uppercase">
+                            Knowledge Graph
+                          </p>
+                        </div>
+                        <KnowledgeGraph graphData={infraGraphs.writing} />
+                      </div>
+                    )}
+                  </section>
+
+                  {/* Critical Perspective */}
+                  <section className="border border-border">
+                    <div className="px-4 py-3 border-b border-border bg-surface">
+                      <h3 className="text-[length:var(--text-body)] font-semibold">비판적 관점</h3>
+                      <p className="text-[length:var(--text-caption)] text-text-secondary mt-0.5">
+                        콘텐츠의 빈틈을 메우는 탐구 질문을 생성합니다.
+                      </p>
+                    </div>
+                    <div className="p-4">
+                      {infraLoading.critical ? (
+                        <div className="space-y-3">
+                          <Skeleton className="h-4 w-full" />
+                          <Skeleton className="h-4 w-3/4" />
+                          <Skeleton className="h-4 w-full" />
+                        </div>
+                      ) : infraCritical ? (
+                        <div
+                          className="prose text-[length:var(--text-small)] leading-relaxed"
+                          dangerouslySetInnerHTML={{ __html: renderedCritical }}
+                        />
+                      ) : (
+                        <p className="text-text-tertiary text-[length:var(--text-small)]">결과를 불러오지 못했습니다.</p>
+                      )}
+                    </div>
+                    {infraGraphs.critical && (
+                      <div className="border-t border-border">
+                        <div className="px-4 py-2 border-b border-border bg-surface">
+                          <p className="text-[length:var(--text-caption)] text-text-secondary font-medium tracking-wide uppercase">
+                            Knowledge Graph
+                          </p>
+                        </div>
+                        <KnowledgeGraph graphData={infraGraphs.critical} />
+                      </div>
+                    )}
+                  </section>
+
+                  {/* SEO Analysis */}
+                  <section className="border border-border">
+                    <div className="px-4 py-3 border-b border-border bg-surface">
+                      <h3 className="text-[length:var(--text-body)] font-semibold">SEO 분석</h3>
+                      <p className="text-[length:var(--text-caption)] text-text-secondary mt-0.5">
+                        키워드: {seoKeyword.trim() || topic.trim() || "—"}
+                      </p>
+                    </div>
+                    <div className="p-4">
+                      {infraLoading.seo ? (
+                        <div className="space-y-3">
+                          <Skeleton className="h-4 w-full" />
+                          <Skeleton className="h-4 w-3/4" />
+                          <Skeleton className="h-4 w-full" />
+                        </div>
+                      ) : infraSeo ? (
+                        <div
+                          className="prose text-[length:var(--text-small)] leading-relaxed"
+                          dangerouslySetInnerHTML={{ __html: renderedSeo }}
+                        />
+                      ) : (
+                        <p className="text-text-tertiary text-[length:var(--text-small)]">
+                          {(seoKeyword.trim() || topic.trim()) ? "결과를 불러오지 못했습니다." : "키워드가 설정되지 않아 SEO 분석을 건너뛰었습니다."}
+                        </p>
+                      )}
+                    </div>
+                    {infraGraphs.seo && (
+                      <div className="border-t border-border">
+                        <div className="px-4 py-2 border-b border-border bg-surface">
+                          <p className="text-[length:var(--text-caption)] text-text-secondary font-medium tracking-wide uppercase">
+                            Knowledge Graph
+                          </p>
+                        </div>
+                        <KnowledgeGraph graphData={infraGraphs.seo} />
+                      </div>
+                    )}
+                  </section>
+
+                  {/* User additional notes */}
+                  <div className="border border-border p-5">
+                    <label className="block text-[length:var(--text-small)] font-medium mb-2">
+                      추가하고 싶은 이야기
+                    </label>
+                    <p className="text-[length:var(--text-caption)] text-text-secondary mb-3">
+                      그래프를 보며 떠오른 아이디어나 추가하고 싶은 내용을 자유롭게 적어주세요. 구조 제안에 반영됩니다.
+                    </p>
+                    <Textarea
+                      value={userNotes}
+                      onChange={(e) => setUserNotes(e.target.value)}
+                      rows={4}
+                      placeholder="예: 이 부분에서 개인적인 경험을 더 넣고 싶다, 반대 의견도 다뤄보자..."
+                    />
+                  </div>
+                </>
+              )}
+
               <div className="flex items-center gap-3 pt-4">
                 <Button
                   variant="secondary"
@@ -750,260 +855,18 @@ export default function WritePage({ params }: WritePageProps) {
                 >
                   ← 이전
                 </Button>
-                <Button onClick={handleInfraCognitive} isLoading={aiLoading} disabled={!analysis}>
-                  인지 다양성 분석 →
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Step 4: InfraNodus — Cognitive Variability */}
-          {currentStep === "infra_cognitive" && (
-            <div className="space-y-6">
-              <h2 className="text-[length:var(--text-h2)] font-serif font-semibold italic mb-4">
-                인지 다양성 분석
-              </h2>
-              <p className="text-[length:var(--text-small)] text-text-secondary">
-                InfraNodus가 텍스트의 인지적 다양성을 분석합니다. 글의 관점이 편향되었는지, 다양한지 파악합니다.
-              </p>
-              {infraCognitive ? (
-                <div className="space-y-4">
-                  <div className="border border-border p-6 rounded-[var(--radius-card)] bg-surface">
-                    <div className="flex items-center gap-3 mb-4">
-                      <span className="px-3 py-1 bg-accent text-text-inverted text-[length:var(--text-caption)] font-medium">
-                        {infraCognitive.cognitiveState}
-                      </span>
-                    </div>
-                    <p className="text-[length:var(--text-small)] leading-relaxed mb-4">
-                      {infraCognitive.description}
-                    </p>
-                    <div className="border-t border-border pt-4">
-                      <p className="text-[length:var(--text-small)] font-medium mb-1">제안</p>
-                      <p className="text-[length:var(--text-small)] text-text-secondary leading-relaxed">
-                        {infraCognitive.suggestion}
-                      </p>
-                    </div>
-                  </div>
-
-                  {infraCognitive.topConcepts.length > 0 && (
-                    <div className="border border-border p-4 rounded-[var(--radius-card)]">
-                      <p className="text-[length:var(--text-small)] font-medium mb-2">핵심 개념</p>
-                      <div className="flex flex-wrap gap-2">
-                        {infraCognitive.topConcepts.map((concept, i) => (
-                          <span key={i} className="px-2 py-1 border border-border text-[length:var(--text-caption)]">
-                            {typeof concept === "string" ? concept : JSON.stringify(concept)}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {infraCognitive.gapConcepts.length > 0 && (
-                    <div className="border border-border p-4 rounded-[var(--radius-card)]">
-                      <p className="text-[length:var(--text-small)] font-medium mb-2">빈틈 개념 (Gap)</p>
-                      <div className="flex flex-wrap gap-2">
-                        {infraCognitive.gapConcepts.map((concept, i) => (
-                          <span key={i} className="px-2 py-1 border border-dashed border-border text-[length:var(--text-caption)] text-text-secondary">
-                            {typeof concept === "string" ? concept : JSON.stringify(concept)}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : aiLoading ? (
-                <div className="space-y-3">
-                  <Skeleton className="h-6 w-32" />
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-4 w-3/4" />
-                </div>
-              ) : (
-                <p className="text-text-secondary">인지 다양성 분석 결과가 여기에 표시됩니다.</p>
-              )}
-              {infraGraphs.cognitive && (
-                <div className="border border-border overflow-hidden">
-                  <div className="px-4 py-2 border-b border-border bg-surface">
-                    <p className="text-[length:var(--text-caption)] text-text-secondary font-medium tracking-wide uppercase">
-                      Knowledge Graph
-                    </p>
-                  </div>
-                  <KnowledgeGraph graphData={infraGraphs.cognitive} />
-                </div>
-              )}
-              <div className="flex items-center gap-3 pt-4">
                 <Button
-                  variant="secondary"
-                  onClick={() => setCurrentStep("analyze")}
+                  onClick={handleSuggest}
+                  isLoading={aiLoading}
+                  disabled={!analysis || aiLoading || anyInfraLoading}
                 >
-                  ← 이전
-                </Button>
-                <Button onClick={handleInfraWriting} isLoading={aiLoading} disabled={!analysis}>
-                  글쓰기 어시스턴트 →
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Step 5: InfraNodus — Writing Assistant */}
-          {currentStep === "infra_writing" && (
-            <div className="space-y-6">
-              <h2 className="text-[length:var(--text-h2)] font-serif font-semibold italic mb-4">
-                글쓰기 어시스턴트
-              </h2>
-              <p className="text-[length:var(--text-small)] text-text-secondary">
-                InfraNodus가 지식 그래프 구조를 기반으로 글 발전 방향을 제안합니다.
-              </p>
-              {infraWriting ? (
-                <div className="border border-border p-6 rounded-[var(--radius-card)] bg-surface">
-                  <div className="prose whitespace-pre-wrap text-[length:var(--text-small)] leading-relaxed">
-                    {infraWriting}
-                  </div>
-                </div>
-              ) : aiLoading ? (
-                <div className="space-y-3">
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-4 w-3/4" />
-                  <Skeleton className="h-4 w-full" />
-                </div>
-              ) : (
-                <p className="text-text-secondary">글쓰기 어시스턴트 결과가 여기에 표시됩니다.</p>
-              )}
-              {infraGraphs.writing && (
-                <div className="border border-border overflow-hidden">
-                  <div className="px-4 py-2 border-b border-border bg-surface">
-                    <p className="text-[length:var(--text-caption)] text-text-secondary font-medium tracking-wide uppercase">
-                      Knowledge Graph
-                    </p>
-                  </div>
-                  <KnowledgeGraph graphData={infraGraphs.writing} />
-                </div>
-              )}
-              <div className="flex items-center gap-3 pt-4">
-                <Button
-                  variant="secondary"
-                  onClick={() => setCurrentStep("infra_cognitive")}
-                >
-                  ← 이전
-                </Button>
-                <Button onClick={handleInfraCritical} isLoading={aiLoading} disabled={!analysis}>
-                  비판적 관점 분석 →
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Step 6: InfraNodus — Critical Perspective */}
-          {currentStep === "infra_critical" && (
-            <div className="space-y-6">
-              <h2 className="text-[length:var(--text-h2)] font-serif font-semibold italic mb-4">
-                비판적 관점
-              </h2>
-              <p className="text-[length:var(--text-small)] text-text-secondary">
-                콘텐츠의 빈틈을 메우는 탐구 질문을 생성합니다. 가정을 의심하고 대안적 시각을 제시합니다.
-              </p>
-              {infraCritical ? (
-                <div className="border border-border p-6 rounded-[var(--radius-card)] bg-surface">
-                  <div className="prose whitespace-pre-wrap text-[length:var(--text-small)] leading-relaxed">
-                    {infraCritical}
-                  </div>
-                </div>
-              ) : aiLoading ? (
-                <div className="space-y-3">
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-4 w-3/4" />
-                  <Skeleton className="h-4 w-full" />
-                </div>
-              ) : (
-                <p className="text-text-secondary">비판적 관점 분석 결과가 여기에 표시됩니다.</p>
-              )}
-              {infraGraphs.critical && (
-                <div className="border border-border overflow-hidden">
-                  <div className="px-4 py-2 border-b border-border bg-surface">
-                    <p className="text-[length:var(--text-caption)] text-text-secondary font-medium tracking-wide uppercase">
-                      Knowledge Graph
-                    </p>
-                  </div>
-                  <KnowledgeGraph graphData={infraGraphs.critical} />
-                </div>
-              )}
-              <div className="flex items-center gap-3 pt-4">
-                <Button
-                  variant="secondary"
-                  onClick={() => setCurrentStep("infra_writing")}
-                >
-                  ← 이전
-                </Button>
-                <Button onClick={() => setCurrentStep("infra_seo")} disabled={!analysis}>
-                  SEO 분석 →
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* Step 7: InfraNodus — SEO Analysis */}
-          {currentStep === "infra_seo" && (
-            <div className="space-y-6">
-              <h2 className="text-[length:var(--text-h2)] font-serif font-semibold italic mb-4">
-                SEO 분석
-              </h2>
-              <p className="text-[length:var(--text-small)] text-text-secondary">
-                사람들이 검색하지만 찾지 못하는 콘텐츠 갭을 분석합니다.
-              </p>
-              <div>
-                <label className="block text-[length:var(--text-small)] font-medium mb-2">
-                  SEO 키워드
-                </label>
-                <input
-                  type="text"
-                  value={seoKeyword}
-                  onChange={(e) => setSeoKeyword(e.target.value)}
-                  placeholder={topic || "검색 키워드를 입력하세요"}
-                  className="w-full px-4 py-2 border border-border rounded-[var(--radius-input)] text-[length:var(--text-body)] placeholder:text-placeholder bg-background text-text-primary focus:outline-none focus:border-accent transition-colors"
-                />
-              </div>
-              {!infraSeo && (
-                <Button onClick={handleInfraSeo} isLoading={aiLoading}>
-                  SEO 분석 시작
-                </Button>
-              )}
-              {infraSeo ? (
-                <div className="border border-border p-6 rounded-[var(--radius-card)] bg-surface">
-                  <div className="prose whitespace-pre-wrap text-[length:var(--text-small)] leading-relaxed">
-                    {infraSeo}
-                  </div>
-                </div>
-              ) : aiLoading ? (
-                <div className="space-y-3">
-                  <Skeleton className="h-4 w-full" />
-                  <Skeleton className="h-4 w-3/4" />
-                  <Skeleton className="h-4 w-full" />
-                </div>
-              ) : null}
-              {infraGraphs.seo && (
-                <div className="border border-border overflow-hidden">
-                  <div className="px-4 py-2 border-b border-border bg-surface">
-                    <p className="text-[length:var(--text-caption)] text-text-secondary font-medium tracking-wide uppercase">
-                      Knowledge Graph
-                    </p>
-                  </div>
-                  <KnowledgeGraph graphData={infraGraphs.seo} />
-                </div>
-              )}
-              <div className="flex items-center gap-3 pt-4">
-                <Button
-                  variant="secondary"
-                  onClick={() => setCurrentStep("infra_critical")}
-                >
-                  ← 이전
-                </Button>
-                <Button onClick={handleSuggest} isLoading={aiLoading} disabled={!analysis}>
                   구조 제안 받기 →
                 </Button>
               </div>
             </div>
           )}
 
-          {/* Step 8: Suggest */}
+          {/* Step 4: Suggest */}
           {currentStep === "suggest" && (
             <div className="space-y-6">
               <h2 className="text-[length:var(--text-h2)] font-serif font-semibold italic mb-4">
@@ -1067,7 +930,7 @@ export default function WritePage({ params }: WritePageProps) {
               <div className="flex items-center gap-3 pt-4">
                 <Button
                   variant="secondary"
-                  onClick={() => setCurrentStep("infra_seo")}
+                  onClick={() => setCurrentStep("infra_combined")}
                 >
                   ← 이전
                 </Button>
@@ -1082,7 +945,7 @@ export default function WritePage({ params }: WritePageProps) {
             </div>
           )}
 
-          {/* Step 9: Draft */}
+          {/* Step 5: Draft */}
           {currentStep === "draft" && (
             <div className="space-y-6">
               <h2 className="text-[length:var(--text-h2)] font-serif font-semibold italic mb-4">
@@ -1109,6 +972,7 @@ export default function WritePage({ params }: WritePageProps) {
             </div>
           )}
 
+          {/* Step 6: Thumbnail */}
           {currentStep === "thumbnail" && (
             <div className="space-y-6">
               <h2 className="text-[length:var(--text-h2)] font-serif font-semibold italic mb-4">
@@ -1233,6 +1097,7 @@ export default function WritePage({ params }: WritePageProps) {
             </div>
           )}
 
+          {/* Step 7: Publish */}
           {currentStep === "publish" && (
             <div className="space-y-6">
               <h2 className="text-[length:var(--text-h2)] font-serif font-semibold italic mb-4">
@@ -1270,7 +1135,6 @@ export default function WritePage({ params }: WritePageProps) {
                 />
               </div>
 
-              {/* Preview */}
               <div>
                 <h3 className="text-[length:var(--text-h3)] font-medium mb-3">
                   미리보기

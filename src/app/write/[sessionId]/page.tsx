@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, use } from "react";
+import { useEffect, useState, use, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { TopNav } from "@/components/layout/TopNav";
 import { Footer } from "@/components/layout/Footer";
@@ -27,6 +27,13 @@ interface Scrap {
   user_note: string | null;
 }
 
+interface CollectionItem {
+  id: string;
+  scrap_id: string | null;
+  article_id: string | null;
+  scrap: Scrap | null;
+}
+
 type Step = "materials" | "direction" | "analyze" | "suggest" | "draft" | "publish";
 
 const STEPS: { key: Step; label: string }[] = [
@@ -37,6 +44,65 @@ const STEPS: { key: Step; label: string }[] = [
   { key: "draft", label: "05 초안 작성" },
   { key: "publish", label: "06 발행" },
 ];
+
+/**
+ * Read a streaming text response from AI SDK's streamText
+ */
+async function readStream(
+  res: Response,
+  onChunk: (text: string) => void
+): Promise<string> {
+  // AI SDK streamText returns either DataStream or TextStream
+  // TextStream: plain text chunks
+  // DataStream: SSE format with data prefixes
+  const contentType = res.headers.get("content-type") || "";
+  const reader = res.body?.getReader();
+  if (!reader) throw new Error("No response body");
+
+  const decoder = new TextDecoder();
+  let full = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    const chunk = decoder.decode(value, { stream: true });
+
+    if (contentType.includes("text/plain")) {
+      // TextStream: raw text
+      full += chunk;
+      onChunk(full);
+    } else {
+      // DataStream (SSE): parse "0:text\n" format
+      const lines = chunk.split("\n");
+      for (const line of lines) {
+        if (line.startsWith("0:")) {
+          try {
+            const text = JSON.parse(line.slice(2));
+            full += text;
+            onChunk(full);
+          } catch {
+            // non-JSON line, skip
+          }
+        }
+      }
+    }
+  }
+
+  return full;
+}
+
+/**
+ * Format scraps into a materials string for the API
+ */
+function formatMaterials(scraps: Scrap[]): string {
+  return scraps
+    .map(
+      (s, i) =>
+        `[소재 ${i + 1}] "${s.exact_quote}"${s.user_note ? `\n  메모: ${s.user_note}` : ""}`
+    )
+    .join("\n\n");
+}
 
 /* ── Main ── */
 interface WritePageProps {
@@ -63,17 +129,14 @@ export default function WritePage({ params }: WritePageProps) {
   const [suggestion, setSuggestion] = useState("");
   const [draft, setDraft] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState("");
 
   // Publish
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
   const [publishing, setPublishing] = useState(false);
 
-  useEffect(() => {
-    fetchSession();
-  }, [sessionId]);
-
-  const fetchSession = async () => {
+  const fetchSession = useCallback(async () => {
     try {
       const res = await fetch(`/api/writing/sessions/${sessionId}`);
       if (!res.ok) {
@@ -90,104 +153,129 @@ export default function WritePage({ params }: WritePageProps) {
       if (collectionRes.ok) {
         const collectionData = await collectionRes.json();
         const collectionScraps = (collectionData.items ?? [])
-          .filter((item: { scrap: Scrap | null }) => item.scrap)
-          .map((item: { scrap: Scrap }) => item.scrap);
+          .filter((item: CollectionItem) => item.scrap)
+          .map((item: CollectionItem) => item.scrap as Scrap);
         setScraps(collectionScraps);
       }
     } finally {
       setLoading(false);
     }
-  };
+  }, [sessionId, router]);
 
+  useEffect(() => {
+    fetchSession();
+  }, [fetchSession]);
 
-  const buildMaterials = useCallback((): string => {
-    return scraps
-      .map((s, i) => {
-        const num = String(i + 1).padStart(2, "0");
-        const note = s.user_note ? `\n   메모: ${s.user_note}` : "";
-        return `${num}. "${s.exact_quote}"${note}`;
-      })
-      .join("\n\n");
-  }, [scraps]);
-
-
-  const readStream = async (
-    res: Response,
-    setter: React.Dispatch<React.SetStateAction<string>>
-  ) => {
-    const reader = res.body?.getReader();
-    if (!reader) return;
-    const decoder = new TextDecoder();
-    let accumulated = "";
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      accumulated += decoder.decode(value, { stream: true });
-      setter(accumulated);
-    }
-  };
   const handleAnalyze = async () => {
+    if (scraps.length === 0) {
+      setAiError("소재가 없습니다. 먼저 콜렉션에 소재를 추가하세요.");
+      return;
+    }
     setAiLoading(true);
+    setAiError("");
     setAnalysis("");
+
     try {
+      const materials = formatMaterials(scraps);
+      const directionText = [
+        topic && `주제: ${topic}`,
+        angle && `관점: ${angle}`,
+        audience && `대상 독자: ${audience}`,
+        tone && `톤: ${tone}`,
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      const fullMaterials = directionText
+        ? `${materials}\n\n[글 방향]\n${directionText}`
+        : materials;
+
       const res = await fetch("/api/writing/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          materials: buildMaterials(),
-        }),
+        body: JSON.stringify({ materials: fullMaterials }),
       });
-      if (res.ok) {
-        await readStream(res, setAnalysis);
-        setCurrentStep("analyze");
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "서버 오류" }));
+        throw new Error(err.error || `HTTP ${res.status}`);
       }
+
+      await readStream(res, (text) => setAnalysis(text));
+      setCurrentStep("analyze");
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : "분석 중 오류가 발생했습니다.");
     } finally {
       setAiLoading(false);
     }
   };
 
   const handleSuggest = async () => {
+    if (!analysis) return;
     setAiLoading(true);
+    setAiError("");
     setSuggestion("");
+
     try {
       const res = await fetch("/api/writing/suggest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          analysis,
-        }),
+        body: JSON.stringify({ analysis }),
       });
-      if (res.ok) {
-        await readStream(res, setSuggestion);
-        setCurrentStep("suggest");
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "서버 오류" }));
+        throw new Error(err.error || `HTTP ${res.status}`);
       }
+
+      await readStream(res, (text) => setSuggestion(text));
+      setCurrentStep("suggest");
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : "구조 제안 중 오류가 발생했습니다.");
     } finally {
       setAiLoading(false);
     }
   };
 
   const handleDraft = async () => {
+    if (!suggestion) return;
     setAiLoading(true);
+    setAiError("");
     setDraft("");
+
     try {
+      const persona = session?.persona || "저널리스트";
+      const materials = formatMaterials(scraps);
+
       const res = await fetch("/api/writing/draft", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          persona: "저널리스트",
-          materials: buildMaterials(),
+          persona,
+          materials,
           analysis,
-          topic,
-          coreMessage: angle,
-          length: "1500",
+          topic: topic || suggestion.split("\n")[0] || "자동 생성 주제",
+          coreMessage: angle || "소재 기반 분석",
+          length: "1500자",
           emphasizedScraps: "",
-          additionalInstructions: tone ? `톤: ${tone}, 독자: ${audience}` : "",
+          additionalInstructions: [
+            audience && `대상 독자: ${audience}`,
+            tone && `톤: ${tone}`,
+          ]
+            .filter(Boolean)
+            .join(". "),
         }),
       });
-      if (res.ok) {
-        await readStream(res, setDraft);
-        setCurrentStep("draft");
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "서버 오류" }));
+        throw new Error(err.error || `HTTP ${res.status}`);
       }
+
+      await readStream(res, (text) => setDraft(text));
+      setCurrentStep("draft");
+    } catch (err) {
+      setAiError(err instanceof Error ? err.message : "초안 작성 중 오류가 발생했습니다.");
     } finally {
       setAiLoading(false);
     }
@@ -258,7 +346,7 @@ export default function WritePage({ params }: WritePageProps) {
             <button
               key={step.key}
               onClick={() => setCurrentStep(step.key)}
-              className={`shrink-0 px-3 py-1.5 text-[length:var(--text-button)] font-medium transition-colors ${
+              className={`shrink-0 px-3 py-1.5 text-[length:var(--text-button)] font-medium transition-colors rounded-[var(--radius-button)] ${
                 currentStep === step.key
                   ? "bg-accent text-text-inverted"
                   : i <= STEPS.findIndex((s) => s.key === currentStep)
@@ -271,6 +359,13 @@ export default function WritePage({ params }: WritePageProps) {
           ))}
         </div>
 
+        {/* Error display */}
+        {aiError && (
+          <div className="mb-6 p-4 border border-red-300 bg-red-50 text-red-700 text-[length:var(--text-small)] rounded-[var(--radius-card)]">
+            {aiError}
+          </div>
+        )}
+
         {/* Step content */}
         <div className="min-h-[400px]">
           {/* Step 1: Materials */}
@@ -282,7 +377,7 @@ export default function WritePage({ params }: WritePageProps) {
               {scraps.length > 0 ? (
                 <div className="space-y-3">
                   {scraps.map((scrap, i) => (
-                    <div key={scrap.id} className="border border-border p-4">
+                    <div key={scrap.id} className="border border-border p-4 rounded-[var(--radius-card)]">
                       <div className="flex items-start gap-3">
                         <span className="text-[length:var(--text-caption)] text-text-tertiary font-mono shrink-0 pt-0.5">
                           {String(i + 1).padStart(2, "0")}
@@ -302,7 +397,9 @@ export default function WritePage({ params }: WritePageProps) {
                   ))}
                 </div>
               ) : (
-                <p className="text-text-secondary">소재가 없습니다.</p>
+                <p className="text-text-secondary">
+                  소재가 없습니다. 아티클에서 텍스트를 선택하여 소재를 추가하세요.
+                </p>
               )}
               <div className="pt-4">
                 <Button onClick={() => setCurrentStep("direction")}>
@@ -349,7 +446,7 @@ export default function WritePage({ params }: WritePageProps) {
                   value={audience}
                   onChange={(e) => setAudience(e.target.value)}
                   placeholder="누구를 위한 글인가요?"
-                  className="w-full px-4 py-2 border border-border text-[length:var(--text-body)] placeholder:text-placeholder focus:outline-none focus:border-accent transition-colors"
+                  className="w-full px-4 py-2 border border-border rounded-[var(--radius-input)] text-[length:var(--text-body)] placeholder:text-placeholder bg-background text-text-primary focus:outline-none focus:border-accent transition-colors"
                 />
               </div>
               <div>
@@ -361,7 +458,7 @@ export default function WritePage({ params }: WritePageProps) {
                   value={tone}
                   onChange={(e) => setTone(e.target.value)}
                   placeholder="예: 에세이풍, 분석적, 친근한, 학술적..."
-                  className="w-full px-4 py-2 border border-border text-[length:var(--text-body)] placeholder:text-placeholder focus:outline-none focus:border-accent transition-colors"
+                  className="w-full px-4 py-2 border border-border rounded-[var(--radius-input)] text-[length:var(--text-body)] placeholder:text-placeholder bg-background text-text-primary focus:outline-none focus:border-accent transition-colors"
                 />
               </div>
               <div className="flex items-center gap-3 pt-4">
@@ -385,13 +482,19 @@ export default function WritePage({ params }: WritePageProps) {
                 소재 분석 결과
               </h2>
               {analysis ? (
-                <div className="border border-border p-[var(--section-padding)] rounded-[var(--radius-card)] bg-surface">
+                <div className="border border-border p-6 rounded-[var(--radius-card)] bg-surface">
                   <div className="prose whitespace-pre-wrap text-[length:var(--text-small)] leading-relaxed">
                     {analysis}
                   </div>
                 </div>
+              ) : aiLoading ? (
+                <div className="space-y-3">
+                  <Skeleton className="h-4 w-3/4" />
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-2/3" />
+                </div>
               ) : (
-                <Skeleton className="h-48 w-full" />
+                <p className="text-text-secondary">분석 결과가 여기에 표시됩니다.</p>
               )}
               <div className="flex items-center gap-3 pt-4">
                 <Button
@@ -400,7 +503,7 @@ export default function WritePage({ params }: WritePageProps) {
                 >
                   ← 이전
                 </Button>
-                <Button onClick={handleSuggest} isLoading={aiLoading}>
+                <Button onClick={handleSuggest} isLoading={aiLoading} disabled={!analysis}>
                   구조 제안 받기 →
                 </Button>
               </div>
@@ -414,13 +517,19 @@ export default function WritePage({ params }: WritePageProps) {
                 글 구조 제안
               </h2>
               {suggestion ? (
-                <div className="border border-border p-[var(--section-padding)] rounded-[var(--radius-card)] bg-surface">
+                <div className="border border-border p-6 rounded-[var(--radius-card)] bg-surface">
                   <div className="prose whitespace-pre-wrap text-[length:var(--text-small)] leading-relaxed">
                     {suggestion}
                   </div>
                 </div>
+              ) : aiLoading ? (
+                <div className="space-y-3">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-5/6" />
+                  <Skeleton className="h-4 w-3/4" />
+                </div>
               ) : (
-                <Skeleton className="h-48 w-full" />
+                <p className="text-text-secondary">구조 제안이 여기에 표시됩니다.</p>
               )}
               <div className="flex items-center gap-3 pt-4">
                 <Button
@@ -429,7 +538,7 @@ export default function WritePage({ params }: WritePageProps) {
                 >
                   ← 이전
                 </Button>
-                <Button onClick={handleDraft} isLoading={aiLoading}>
+                <Button onClick={handleDraft} isLoading={aiLoading} disabled={!suggestion}>
                   초안 작성 →
                 </Button>
               </div>
@@ -478,7 +587,7 @@ export default function WritePage({ params }: WritePageProps) {
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder="글 제목을 입력하세요"
-                  className="w-full px-4 py-2 border border-border text-[length:var(--text-body)] placeholder:text-placeholder focus:outline-none focus:border-accent transition-colors"
+                  className="w-full px-4 py-2 border border-border rounded-[var(--radius-input)] text-[length:var(--text-body)] placeholder:text-placeholder bg-background text-text-primary focus:outline-none focus:border-accent transition-colors"
                 />
               </div>
               <div>
@@ -497,7 +606,7 @@ export default function WritePage({ params }: WritePageProps) {
                     )
                   }
                   placeholder="my-post-title"
-                  className="w-full px-4 py-2 border border-border text-[length:var(--text-body)] font-mono placeholder:text-placeholder focus:outline-none focus:border-accent transition-colors"
+                  className="w-full px-4 py-2 border border-border rounded-[var(--radius-input)] text-[length:var(--text-body)] font-mono placeholder:text-placeholder bg-background text-text-primary focus:outline-none focus:border-accent transition-colors"
                 />
               </div>
 
@@ -506,7 +615,7 @@ export default function WritePage({ params }: WritePageProps) {
                 <h3 className="text-[length:var(--text-h3)] font-medium mb-3">
                   미리보기
                 </h3>
-                <div className="border border-border p-[var(--section-padding)] rounded-[var(--radius-card)] bg-surface">
+                <div className="border border-border p-6 rounded-[var(--radius-card)] bg-surface">
                   <div className="prose whitespace-pre-wrap text-[length:var(--text-small)] leading-relaxed max-h-[300px] overflow-y-auto">
                     {draft || "초안이 없습니다."}
                   </div>

@@ -146,17 +146,33 @@ export default function WritePage({ params }: WritePageProps) {
       const data = await res.json();
       setSession(data.session);
 
-      // Fetch scraps from the collection
-      const collectionRes = await fetch(
-        `/api/collections/${data.session.collection_id}`
-      );
+      const [collectionRes, allScrapsRes] = await Promise.all([
+        fetch(`/api/collections/${data.session.collection_id}`),
+        fetch("/api/scraps"),
+      ]);
+
+      const seen = new Set<string>();
+      const merged: Scrap[] = [];
       if (collectionRes.ok) {
         const collectionData = await collectionRes.json();
-        const collectionScraps = (collectionData.items ?? [])
-          .filter((item: CollectionItem) => item.scrap)
-          .map((item: CollectionItem) => item.scrap as Scrap);
-        setScraps(collectionScraps);
+        for (const item of (collectionData.items ?? []) as CollectionItem[]) {
+          if (item.scrap) {
+            seen.add(item.scrap.id);
+            merged.push(item.scrap);
+          }
+        }
       }
+
+      if (allScrapsRes.ok) {
+        const allScrapsData = await allScrapsRes.json();
+        for (const scrap of (allScrapsData.scraps ?? []) as Scrap[]) {
+          if (!seen.has(scrap.id)) {
+            merged.push(scrap);
+          }
+        }
+      }
+
+      setScraps(merged);
     } finally {
       setLoading(false);
     }

@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Footer, PageContainer, TopNav } from "@/components/layout";
 import { Badge, Button, Skeleton } from "@/components/ui";
+import { createClient } from "@/lib/supabase/client";
 
 type PostStatus = "draft" | "published" | "archived" | "unlisted";
 
@@ -58,6 +59,8 @@ export default function MyPressPostPage() {
   const [error, setError] = useState<string | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [pendingAction, setPendingAction] = useState<"status" | "delete" | null>(null);
+  const [handle, setHandle] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const loadPost = useCallback(async () => {
     if (!slug) {
@@ -119,6 +122,29 @@ export default function MyPressPostPage() {
     loadPost();
   }, [loadPost]);
 
+
+  useEffect(() => {
+    const fetchHandle = async () => {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from("profiles")
+        .select("handle")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (data) setHandle(data.handle);
+    };
+    fetchHandle();
+  }, []);
+
+  const copyShareLink = useCallback(() => {
+    if (!handle || !slug) return;
+    const url = `${window.location.origin}/press/${handle}/${slug}`;
+    navigator.clipboard.writeText(url);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [handle, slug]);
   const publishDate = useMemo(() => {
     if (!post) {
       return "";
@@ -221,6 +247,11 @@ export default function MyPressPostPage() {
             <Button variant="ghost" size="sm" disabled>
               편집 준비중
             </Button>
+            {post?.status === "published" && handle && (
+              <Button variant="secondary" size="sm" onClick={copyShareLink}>
+                {copied ? "복사됨!" : "공유 링크"}
+              </Button>
+            )}
             <Button
               variant={post?.status === "published" ? "secondary" : "primary"}
               size="sm"

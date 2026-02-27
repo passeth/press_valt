@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
-import { Footer, PageContainer, TopNav } from "@/components/layout";
+
 
 interface PressPostPageProps {
   params: Promise<{ handle: string; slug: string }>;
@@ -113,9 +113,7 @@ export default async function PressPostPage({ params }: PressPostPageProps) {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <TopNav />
-
-      <PageContainer maxWidth="article">
+      <main className="flex-1 w-full max-w-2xl mx-auto px-5 py-12">
         <Link
           href={`/press/${handle}`}
           className="text-[length:var(--text-caption)] text-text-secondary transition-colors hover:text-text-primary"
@@ -172,9 +170,16 @@ export default async function PressPostPage({ params }: PressPostPageProps) {
             </ul>
           </section>
         )}
-      </PageContainer>
+      </main>
 
-      <Footer />
+      <footer className="w-full max-w-2xl mx-auto px-5 pb-8 border-t border-border pt-6">
+        <Link
+          href={`/press/${handle}`}
+          className="text-[length:var(--text-caption)] text-text-tertiary transition-colors hover:text-text-secondary"
+        >
+          {profile.display_name || profile.handle}&apos;s Press
+        </Link>
+      </footer>
     </div>
   );
 }

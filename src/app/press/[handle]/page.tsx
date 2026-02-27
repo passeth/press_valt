@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import type { Metadata } from "next";
 import { createClient } from "@/lib/supabase/server";
-import { Footer, PageContainer, TopNav } from "@/components/layout";
+
 
 interface PressPageProps {
   params: Promise<{ handle: string }>;
@@ -63,9 +63,7 @@ export default async function PressPage({ params }: PressPageProps) {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-      <TopNav />
-
-      <PageContainer maxWidth="article">
+      <main className="flex-1 w-full max-w-2xl mx-auto px-5 py-12">
         <header className="mb-10 border-b border-border pb-6">
           <p className="text-[length:var(--text-caption)] uppercase tracking-[0.08em] text-text-secondary">
             공개 프레스
@@ -117,9 +115,13 @@ export default async function PressPage({ params }: PressPageProps) {
             </p>
           </div>
         )}
-      </PageContainer>
+      </main>
 
-      <Footer />
+      <footer className="w-full max-w-2xl mx-auto px-5 pb-8">
+        <p className="text-[length:var(--text-caption)] text-text-tertiary text-center">
+          {profile.display_name || profile.handle}&apos;s Press
+        </p>
+      </footer>
     </div>
   );
 }

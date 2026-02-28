@@ -58,7 +58,10 @@ export default function KnowledgeGraph({ graphData, height = 400 }: KnowledgeGra
 
   const clonedData = useMemo(
     () => ({
-      nodes: graphData.nodes.map((n) => ({ ...n })),
+      nodes: graphData.nodes.map((n) => ({
+        ...n,
+        ...(n.x != null && n.y != null && { fx: n.x, fy: n.y }),
+      })),
       links: graphData.links.map((l) => ({ ...l })),
     }),
     [graphData]
@@ -94,6 +97,11 @@ export default function KnowledgeGraph({ graphData, height = 400 }: KnowledgeGra
     return map;
   }, [graphData.nodes]);
 
+  const hasFixedPositions = useMemo(
+    () => graphData.nodes.length > 0 && graphData.nodes.every((n) => n.x != null && n.y != null),
+    [graphData.nodes]
+  );
+
   useEffect(() => {
     if (!containerRef.current) return;
     const observer = new ResizeObserver((entries) => {
@@ -105,13 +113,13 @@ export default function KnowledgeGraph({ graphData, height = 400 }: KnowledgeGra
   }, []);
 
   useEffect(() => {
-    if (fgRef.current) {
+    if (fgRef.current && !hasFixedPositions) {
       const charge = fgRef.current.d3Force("charge");
       if (charge) charge.strength(-400);
       const link = fgRef.current.d3Force("link");
       if (link && link.distance) link.distance(120);
     }
-  }, [clonedData]);
+  }, [clonedData, hasFixedPositions]);
 
   const handleNodeHover = useCallback((node: { id?: string | number } | null) => {
     setHoverNode(node?.id != null ? String(node.id) : null);
@@ -273,7 +281,7 @@ export default function KnowledgeGraph({ graphData, height = 400 }: KnowledgeGra
           }}
           nodeCanvasObjectMode={() => "replace"}
           onNodeHover={handleNodeHover}
-          cooldownTicks={100}
+          cooldownTicks={hasFixedPositions ? 0 : 100}
           onEngineStop={() => fgRef.current?.zoomToFit(400, 80)}
         />
       )}

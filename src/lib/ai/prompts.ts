@@ -69,6 +69,17 @@ ${params.topic}
 강조 소재: ${params.emphasizedScraps}
 추가 지시: ${params.additionalInstructions}`,
 
+  seoKeywordExtraction: (analysisText: string) => `당신은 SEO 전문가입니다. 아래 콘텐츠 분석 결과를 읽고, 이 글의 핵심 주제에 대해 Google 검색에서 가장 효과적인 SEO 검색 키워드를 하나만 추출하세요.
+
+규칙:
+1. 키워드만 응답하세요. 설명이나 부가 텍스트 없이 키워드 하나만 출력하세요.
+2. 2~4 단어의 검색어로 작성하세요.
+3. 실제 사용자가 Google에서 검색할 법한 자연스러운 표현을 사용하세요.
+4. 분석 내용의 언어와 동일한 언어로 작성하세요.
+
+[콘텐츠 분석]
+${analysisText}`,
+
   imagePromptSuggestions: (draft: string, style: string) => `당신은 비주얼 디렉터입니다. 아래 글의 내용과 분위기를 분석하여, "${style}" 스타일에 맞는 이미지 생성 프롬프트를 정확히 3개 제안하세요.
 
 규칙:

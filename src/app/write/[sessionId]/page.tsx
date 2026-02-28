@@ -147,6 +147,7 @@ export default function WritePage({ params }: WritePageProps) {
   const [infraCritical, setInfraCritical] = useState("");
   const [infraSeo, setInfraSeo] = useState("");
   const [seoKeyword, setSeoKeyword] = useState("");
+  const [aiSeoKeyword, setAiSeoKeyword] = useState("");
   const [infraGraphs, setInfraGraphs] = useState<Record<string, GraphData>>({});
   const [infraLoading, setInfraLoading] = useState({ cognitive: false, writing: false, critical: false, seo: false });
   const [userNotes, setUserNotes] = useState("");
@@ -227,8 +228,24 @@ export default function WritePage({ params }: WritePageProps) {
   }, [fetchSession]);
 
   const runAllInfraAnalysis = async (analysisText: string) => {
-    const query = seoKeyword.trim() || topic.trim();
-    setInfraLoading({ cognitive: true, writing: true, critical: true, seo: !!query });
+    setInfraLoading({ cognitive: true, writing: true, critical: true, seo: true });
+
+    // Extract SEO keyword via AI
+    let seoQuery = seoKeyword.trim() || topic.trim();
+    try {
+      const kwRes = await fetch("/api/writing/seo-keyword", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ analysisText }),
+      });
+      if (kwRes.ok) {
+        const kwData = await kwRes.json() as { keyword: string };
+        if (kwData.keyword) {
+          seoQuery = kwData.keyword;
+          setAiSeoKeyword(kwData.keyword);
+        }
+      }
+    } catch { /* AI keyword extraction failed — use fallback */ }
 
     const cognitiveTask = (async () => {
       try {
@@ -279,7 +296,7 @@ export default function WritePage({ params }: WritePageProps) {
     })();
 
     const seoTask = (async () => {
-      if (!query) {
+      if (!seoQuery) {
         setInfraLoading((prev) => ({ ...prev, seo: false }));
         return;
       }
@@ -287,7 +304,7 @@ export default function WritePage({ params }: WritePageProps) {
         const res = await fetch("/api/writing/infranodus/seo-analysis", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ searchQuery: query }),
+          body: JSON.stringify({ searchQuery: seoQuery }),
         });
         if (res.ok) {
           const data = await res.json();
@@ -797,7 +814,7 @@ export default function WritePage({ params }: WritePageProps) {
                     <div className="px-4 py-3 border-b border-border bg-surface">
                       <h3 className="text-[length:var(--text-body)] font-semibold">SEO 분석</h3>
                       <p className="text-[length:var(--text-caption)] text-text-secondary mt-0.5">
-                        키워드: {seoKeyword.trim() || topic.trim() || "—"}
+                        키워드: {aiSeoKeyword || seoKeyword.trim() || topic.trim() || "—"}
                       </p>
                     </div>
                     <div className="p-4">
@@ -814,7 +831,7 @@ export default function WritePage({ params }: WritePageProps) {
                         />
                       ) : (
                         <p className="text-text-tertiary text-[length:var(--text-small)]">
-                          {(seoKeyword.trim() || topic.trim()) ? "결과를 불러오지 못했습니다." : "키워드가 설정되지 않아 SEO 분석을 건너뛰었습니다."}
+                          {(aiSeoKeyword || seoKeyword.trim() || topic.trim()) ? "결과를 불러오지 못했습니다." : "키워드를 추출하지 못해 SEO 분석을 건너뛰었습니다."}
                         </p>
                       )}
                     </div>

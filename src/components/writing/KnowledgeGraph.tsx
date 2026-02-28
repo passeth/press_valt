@@ -40,6 +40,16 @@ function getNodeId(val: LinkEndpoint): string {
   return String(val ?? "");
 }
 
+function lightenColor(hex: string, amount: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const lr = Math.min(255, Math.round(r + (255 - r) * amount));
+  const lg = Math.min(255, Math.round(g + (255 - g) * amount));
+  const lb = Math.min(255, Math.round(b + (255 - b) * amount));
+  return `rgb(${lr},${lg},${lb})`;
+}
+
 export default function KnowledgeGraph({ graphData, height = 400 }: KnowledgeGraphProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const fgRef = useRef<ForceGraphRef | null>(null);
@@ -65,7 +75,16 @@ export default function KnowledgeGraph({ graphData, height = 400 }: KnowledgeGra
     return map;
   }, [graphData]);
 
-  const maxBc = useMemo(() => Math.max(...graphData.nodes.map((n) => n.bc), 0.001), [graphData.nodes]);
+  const maxBc = useMemo(
+    () => Math.max(...graphData.nodes.map((n) => n.bc), 0.001),
+    [graphData.nodes]
+  );
+
+  const bcThreshold = useMemo(() => {
+    const sorted = graphData.nodes.map((n) => n.bc).sort((a, b) => b - a);
+    const idx = Math.max(0, Math.floor(sorted.length * 0.3) - 1);
+    return sorted[idx] ?? 0;
+  }, [graphData.nodes]);
 
   const nodeColorMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -77,27 +96,20 @@ export default function KnowledgeGraph({ graphData, height = 400 }: KnowledgeGra
 
   useEffect(() => {
     if (!containerRef.current) return;
-
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
-      if (entry) {
-        setContainerWidth(entry.contentRect.width);
-      }
+      if (entry) setContainerWidth(entry.contentRect.width);
     });
-
     observer.observe(containerRef.current);
-
-    return () => {
-      observer.disconnect();
-    };
+    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
     if (fgRef.current) {
       const charge = fgRef.current.d3Force("charge");
-      if (charge) charge.strength(-300);
+      if (charge) charge.strength(-400);
       const link = fgRef.current.d3Force("link");
-      if (link && link.distance) link.distance(100);
+      if (link && link.distance) link.distance(120);
     }
   }, [clonedData]);
 
@@ -109,22 +121,31 @@ export default function KnowledgeGraph({ graphData, height = 400 }: KnowledgeGra
     (link: { source?: LinkEndpoint; target?: LinkEndpoint }) => {
       const sourceId = getNodeId(link.source);
       const color = nodeColorMap.get(sourceId) ?? "#ffffff";
-      if (!hoverNode) return color + "40";
+      if (!hoverNode) return color + "59";
       const targetId = getNodeId(link.target);
-      if (sourceId === hoverNode || targetId === hoverNode) return color + "BB";
-      return color + "0A";
+      if (sourceId === hoverNode || targetId === hoverNode) return color + "D9";
+      return color + "0D";
     },
     [nodeColorMap, hoverNode]
   );
 
-  const linkWidth = useCallback(
-    (link: { source?: LinkEndpoint; target?: LinkEndpoint }) => {
-      if (!hoverNode) return 0.8;
+  const linkWidthFn = useCallback(
+    (link: { source?: LinkEndpoint; target?: LinkEndpoint; weight?: number }) => {
+      const base = 0.5 + (link.weight ?? 1) * 0.8;
+      if (!hoverNode) return base;
       const s = getNodeId(link.source);
       const t = getNodeId(link.target);
-      return s === hoverNode || t === hoverNode ? 3 : 0.2;
+      return s === hoverNode || t === hoverNode ? base * 2.5 : 0.15;
     },
     [hoverNode]
+  );
+
+  const particleColorFn = useCallback(
+    (link: { source?: LinkEndpoint }) => {
+      const sourceId = getNodeId(link.source);
+      return (nodeColorMap.get(sourceId) ?? "#ffffff") + "99";
+    },
+    [nodeColorMap]
   );
 
   return (
@@ -135,77 +156,125 @@ export default function KnowledgeGraph({ graphData, height = 400 }: KnowledgeGra
           graphData={clonedData}
           width={containerWidth}
           height={height}
-          backgroundColor="#1a1a2e"
+          backgroundColor="#0d1117"
+          linkColor={linkColorFn}
+          linkWidth={linkWidthFn}
+          linkCurvature={0.15}
+          linkDirectionalParticles={3}
+          linkDirectionalParticleWidth={2.5}
+          linkDirectionalParticleSpeed={0.004}
+          linkDirectionalParticleColor={particleColorFn}
           nodeCanvasObject={(node, ctx: CanvasRenderingContext2D, globalScale: number) => {
-            const graphNode = node as unknown as GraphNode;
+            const gn = node as unknown as GraphNode;
             const nodeId = String(node.id ?? "");
-            const x = graphNode.x ?? 0;
-            const y = graphNode.y ?? 0;
-            const bcRatio = graphNode.bc / maxBc;
-            const radius = 4 + bcRatio * 26;
-            const color = COMMUNITY_COLORS[graphNode.community % COMMUNITY_COLORS.length];
+            const x = gn.x ?? 0;
+            const y = gn.y ?? 0;
+            const bcRatio = gn.bc / maxBc;
+            const radius = 3 + bcRatio * 32;
+            const color = COMMUNITY_COLORS[gn.community % COMMUNITY_COLORS.length];
 
             const isHover = hoverNode === nodeId;
             const isNeighbor = hoverNode !== null && (neighbors.get(hoverNode)?.has(nodeId) ?? false);
             const isDimmed = hoverNode !== null && !isHover && !isNeighbor;
+            const isImportant = gn.bc >= bcThreshold;
 
-            // Outer glow aura
-            const gradient = ctx.createRadialGradient(x, y, radius * 0.5, x, y, radius * 2.5);
-            gradient.addColorStop(0, color + "40");
-            gradient.addColorStop(1, "transparent");
+            // 1. OUTER GLOW HALO
+            const glowRadius = radius * 3.5;
+            const glow = ctx.createRadialGradient(x, y, radius * 0.3, x, y, glowRadius);
+            glow.addColorStop(0, color + (isHover ? "80" : "40"));
+            glow.addColorStop(0.6, color + "15");
+            glow.addColorStop(1, "transparent");
             ctx.beginPath();
-            ctx.arc(x, y, radius * 2.5, 0, 2 * Math.PI);
-            ctx.fillStyle = gradient;
-            ctx.globalAlpha = isDimmed ? 0.05 : 0.6;
+            ctx.arc(x, y, glowRadius, 0, 2 * Math.PI);
+            ctx.fillStyle = glow;
+            ctx.globalAlpha = isDimmed ? 0.03 : isHover ? 1.0 : 0.7;
             ctx.fill();
 
-            // Main circle
+            // 2. SHADOW GLOW (hover/neighbor)
+            if ((isHover || isNeighbor) && !isDimmed) {
+              ctx.save();
+              ctx.shadowColor = color;
+              ctx.shadowBlur = isHover ? 35 : 18;
+              ctx.beginPath();
+              ctx.arc(x, y, radius, 0, 2 * Math.PI);
+              ctx.fillStyle = color;
+              ctx.globalAlpha = isHover ? 0.6 : 0.35;
+              ctx.fill();
+              ctx.restore();
+            }
+
+            // 3. MAIN CIRCLE
             ctx.beginPath();
             ctx.arc(x, y, radius, 0, 2 * Math.PI);
-            ctx.globalAlpha = isDimmed ? 0.12 : isHover || isNeighbor ? 1.0 : 0.9;
+            ctx.globalAlpha = isDimmed ? 0.1 : isHover ? 1.0 : isNeighbor ? 0.95 : 0.85;
             ctx.fillStyle = color;
             ctx.fill();
 
-            // White highlight for 3D effect
-            ctx.beginPath();
-            ctx.arc(x, y, radius * 0.7, 0, 2 * Math.PI);
-            ctx.globalAlpha = isDimmed ? 0 : 0.15;
-            ctx.fillStyle = "#ffffff";
-            ctx.fill();
-
-            // Hover/neighbor glow
-            if (isHover || isNeighbor) {
-              ctx.shadowColor = color;
-              ctx.shadowBlur = 20;
+            // 4. BORDER RING
+            if (!isDimmed) {
               ctx.beginPath();
               ctx.arc(x, y, radius, 0, 2 * Math.PI);
-              ctx.globalAlpha = 1.0;
-              ctx.fillStyle = color;
-              ctx.fill();
-              ctx.shadowBlur = 0;
-              ctx.shadowColor = "transparent";
+              ctx.strokeStyle = lightenColor(color, 0.3);
+              ctx.lineWidth = isHover ? 2 : 1;
+              ctx.globalAlpha = 0.6;
+              ctx.stroke();
             }
 
-            // Labels — always visible, size proportional to importance
-            const labelSize = Math.max((3 + bcRatio * 9) / globalScale, 2.5);
-            ctx.font = `${isHover ? "bold " : ""}${labelSize}px sans-serif`;
+            // 5. INNER HIGHLIGHT (3D depth)
+            if (!isDimmed && radius > 5) {
+              const hlX = x - radius * 0.25;
+              const hlY = y - radius * 0.25;
+              const hlR = radius * 0.55;
+              const hl = ctx.createRadialGradient(hlX, hlY, 0, hlX, hlY, hlR);
+              hl.addColorStop(0, "rgba(255,255,255,0.3)");
+              hl.addColorStop(1, "rgba(255,255,255,0)");
+              ctx.beginPath();
+              ctx.arc(hlX, hlY, hlR, 0, 2 * Math.PI);
+              ctx.fillStyle = hl;
+              ctx.globalAlpha = isHover ? 0.5 : 0.25;
+              ctx.fill();
+            }
+
+            // 6. LABEL
+            const fontSize = Math.max((4 + bcRatio * 12) / globalScale, 2);
+            const isBold = isImportant || isHover;
+            ctx.font = `${isBold ? "bold " : ""}${fontSize}px Inter, system-ui, sans-serif`;
             ctx.textAlign = "center";
             ctx.textBaseline = "top";
-            ctx.globalAlpha = isDimmed ? 0.08 : isHover ? 1.0 : 0.85;
-            ctx.fillStyle = isDimmed ? "rgba(255,255,255,0.08)" : isHover ? "#ffffff" : "rgba(255,255,255,0.85)";
-            ctx.fillText(graphNode.label, x, y + radius + 2);
 
-            // Reset
+            if (isDimmed) {
+              ctx.globalAlpha = 0.08;
+              ctx.fillStyle = "rgba(255,255,255,0.08)";
+            } else if (isHover) {
+              ctx.globalAlpha = 1.0;
+              ctx.fillStyle = "#ffffff";
+            } else if (isImportant) {
+              ctx.globalAlpha = 0.95;
+              ctx.fillStyle = "#ffffff";
+            } else {
+              ctx.globalAlpha = 0.6;
+              ctx.fillStyle = "rgba(255,255,255,0.6)";
+            }
+
+            if ((isHover || isImportant) && !isDimmed) {
+              ctx.save();
+              ctx.shadowColor = "rgba(0,0,0,0.8)";
+              ctx.shadowBlur = 4;
+              ctx.fillText(gn.label, x, y + radius + 3);
+              ctx.restore();
+            } else {
+              ctx.fillText(gn.label, x, y + radius + 3);
+            }
+
+            // RESET
             ctx.globalAlpha = 1;
             ctx.shadowBlur = 0;
             ctx.shadowColor = "transparent";
           }}
           nodeCanvasObjectMode={() => "replace"}
           onNodeHover={handleNodeHover}
-          linkColor={linkColorFn}
-          linkWidth={linkWidth}
           cooldownTicks={100}
-          onEngineStop={() => fgRef.current?.zoomToFit(400, 60)}
+          onEngineStop={() => fgRef.current?.zoomToFit(400, 80)}
         />
       )}
     </div>

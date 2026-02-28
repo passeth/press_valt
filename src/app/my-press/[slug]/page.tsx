@@ -16,6 +16,7 @@ interface Post {
   title: string;
   markdown: string;
   rendered_html: string | null;
+  thumbnail_url: string | null;
   status: PostStatus;
   published_at: string | null;
   created_at: string;
@@ -379,6 +380,16 @@ export default function MyPressPostPage() {
           </section>
         ) : post ? (
           <>
+            {post.thumbnail_url && (
+              <div className="mb-8 -mx-6 sm:-mx-8">
+                <img
+                  src={post.thumbnail_url}
+                  alt={post.title}
+                  className="w-full object-cover"
+                  style={{ maxHeight: "400px" }}
+                />
+              </div>
+            )}
             <header className="mb-8">
               <div className="mb-3 flex flex-wrap items-center gap-2">
                 <Badge variant={STATUS_VARIANT[post.status]}>{STATUS_LABEL[post.status]}</Badge>

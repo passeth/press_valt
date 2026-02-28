@@ -398,9 +398,9 @@ h3 {
 ::-webkit-scrollbar-thumb:hover { background: var(--color-text-tertiary); }
 
 /* Theme-driven border-radius */
-[data-theme="editorial"] *, [data-theme="editorial"] *::before, [data-theme="editorial"] *::after {
+[data-theme="editorial"] :where(*), [data-theme="editorial"] :where(*::before), [data-theme="editorial"] :where(*::after) {
   border-radius: 0 !important;
 }
-[data-theme="forest"] *, [data-theme="forest"] *::before, [data-theme="forest"] *::after {
+[data-theme="forest"] :where(*), [data-theme="forest"] :where(*::before), [data-theme="forest"] :where(*::after) {
   border-radius: var(--radius-card) !important;
 }

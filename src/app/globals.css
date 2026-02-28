@@ -397,10 +397,23 @@ h3 {
 ::-webkit-scrollbar-thumb { background: var(--color-border); }
 ::-webkit-scrollbar-thumb:hover { background: var(--color-text-tertiary); }
 
-/* Theme-driven border-radius */
-[data-theme="editorial"] :where(*), [data-theme="editorial"] :where(*::before), [data-theme="editorial"] :where(*::after) {
+/* Theme-driven border-radius override for Tailwind classes */
+[data-theme="editorial"] button,
+[data-theme="editorial"] input,
+[data-theme="editorial"] select,
+[data-theme="editorial"] textarea,
+[data-theme="editorial"] a,
+[data-theme="editorial"] div,
+[data-theme="editorial"] section,
+[data-theme="editorial"] article,
+[data-theme="editorial"] aside,
+[data-theme="editorial"] nav,
+[data-theme="editorial"] img,
+[data-theme="editorial"] figure,
+[data-theme="editorial"] details,
+[data-theme="editorial"] summary,
+[data-theme="editorial"] ul,
+[data-theme="editorial"] li,
+[data-theme="editorial"] span {
   border-radius: 0 !important;
-}
-[data-theme="forest"] :where(*), [data-theme="forest"] :where(*::before), [data-theme="forest"] :where(*::after) {
-  border-radius: var(--radius-card) !important;
 }

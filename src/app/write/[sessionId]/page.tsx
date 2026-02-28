@@ -797,16 +797,6 @@ export default function WritePage({ params }: WritePageProps) {
                         <p className="text-text-tertiary text-[length:var(--text-small)]">결과를 불러오지 못했습니다.</p>
                       )}
                     </div>
-                    {infraGraphs.critical && (
-                      <div className="border-t border-border">
-                        <div className="px-4 py-2 border-b border-border bg-surface">
-                          <p className="text-[length:var(--text-caption)] text-text-secondary font-medium tracking-wide uppercase">
-                            Knowledge Graph
-                          </p>
-                        </div>
-                        <KnowledgeGraph graphData={infraGraphs.critical} />
-                      </div>
-                    )}
                   </section>
 
                   {/* SEO Analysis */}
